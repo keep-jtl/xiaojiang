@@ -126,6 +126,7 @@
   --note-bg: #faf3e4;       --note-ink: #a8792c;  /* 历史持仓提示条 */
 
   --line: #eae6de;          /* 分割线：暖灰 */
+  --card-border: #e2ded3;   /* 卡片描边（比分割线略深） */
   --shadow: 0 1px 2px rgba(43,42,38,.04), 0 4px 16px rgba(43,42,38,.06);
   --topbar: rgba(247,245,241,.92);
   --radius: 14px;
@@ -160,6 +161,7 @@
   --note-bg: #352c1d;       --note-ink: #e2b76e;
 
   --line: #2e333c;
+  --card-border: #343a46;
   --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.32);
   --topbar: rgba(27,29,34,.92);
 }
@@ -196,10 +198,24 @@ html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚
 .nav a {
   text-decoration: none; color: var(--ink-2);
   padding: 6px 14px; border-radius: 9px; font-size: 14px;
+  white-space: nowrap; /* 导航文字不换行、不被挤成竖排 */
   transition: all .15s;
 }
 .nav a:hover { background: var(--brand-soft); color: var(--brand); }
 .nav a.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+/* 窄窗口导航：次要入口收进「更多」下拉（nav.js 按宽度自动分级） */
+.nav-more { position: relative; }
+.nav-more-btn { display: flex; align-items: center; gap: 4px; }
+.nav-more-btn.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.nav-dropdown {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
+  background: var(--card); border: 1px solid var(--card-border); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 6px; min-width: 150px;
+  display: none; /* 默认关闭；只有用户主动点击「更多」才展开（不用 hover，避免误触） */
+}
+.nav-more.open .nav-dropdown { display: block; }
+.nav-dropdown a { display: block; padding: 8px 12px; border-radius: 8px; white-space: nowrap; }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--ink-3); font-size: 13px; }
 
 /* 顶栏窄屏适配：优先保住导航，隐藏次要文字、压缩间距 */
@@ -207,6 +223,10 @@ html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚
 @media (max-width: 860px) {
   .nav a { padding: 6px 8px; font-size: 13px; }
   .logo { margin-right: 16px; font-size: 15px; }
+}
+@media (max-width: 700px) {
+  .logo-text { display: none; } /* 极窄窗口只保留 logo 图形 */
+  .logo { margin-right: 12px; }
 }
 
 /* ---------- 页面容器 ---------- */
@@ -302,6 +322,7 @@ html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚
 .msg-tags { display: flex; gap: 6px; margin-bottom: 4px; align-items: center; }
 .tag {
   font-size: 11px; padding: 1px 8px; border-radius: 20px; font-weight: 500;
+  white-space: nowrap;
 }
 .tag-green { background: var(--tag-green-bg); color: var(--tag-green-ink); }   /* 利好（蓝） */
 .tag-red { background: var(--tag-red-bg); color: var(--tag-red-ink); }         /* 利空（橙） */
@@ -341,7 +362,7 @@ html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚
 .fund-card:hover { transform: translateY(-1px); }
 
 /* 窄屏：基金卡片重排为 2 列（名称/类型占整行，数字两两并排），表头隐藏 */
-@media (max-width: 760px) {
+@media (max-width: 980px) {
   .fund-bar { display: none; }
   .fund-card { grid-template-columns: 1fr 1fr; row-gap: 8px; }
   .fund-name, .fund-meta { grid-column: 1 / -1; }
@@ -360,6 +381,7 @@ html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚
   border: none; cursor: pointer;
   background: var(--brand); color: #fff;   /* 主要按钮：跟随主题色 */
   padding: 9px 18px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  white-space: nowrap; /* 按钮文字不换行、不被压扁 */
   transition: all .15s;
 }
 .btn:hover { opacity: .9; }
@@ -369,6 +391,18 @@ html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚
 }
 .btn-ghost:hover { background: var(--brand-soft); opacity: 1; }
 .btn-sm { padding: 6px 12px; font-size: 12.5px; border-radius: 8px; }
+
+/* ---------- 共享控件（多页面复用：分段选择 / 开关 / 图标按钮） ---------- */
+.seg { display: flex; gap: 8px; flex-wrap: wrap; }
+.seg .seg-btn { border: 1px solid var(--card-border); background: none; color: var(--ink-2); font-size: 13px; padding: 7px 14px; border-radius: 8px; cursor: pointer; }
+.seg .seg-btn.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.switch { width: 38px; height: 21px; border-radius: 11px; background: var(--ink-3); opacity: .45; position: relative; cursor: pointer; transition: background .2s, opacity .2s; flex-shrink: 0; }
+.switch::after { content: ''; position: absolute; width: 17px; height: 17px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch.on { background: var(--brand); opacity: 1; }
+.switch.on::after { left: 19px; }
+.icon-btn { border: none; background: none; cursor: pointer; color: var(--ink-3); font-size: 14px; padding: 4px; border-radius: 6px; }
+.icon-btn:hover { background: var(--brand-soft); color: var(--brand); }
+.icon-btn.del:hover { background: var(--tag-red-bg); color: var(--tag-red-ink); }
 
 /* ---------- 页头操作区 ---------- */
 .page-actions { display: flex; gap: 10px; justify-content: flex-end; margin-bottom: 16px; }
@@ -464,3 +498,29 @@ html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚
   cursor: pointer; border: 2px solid transparent; padding: 0;
 }
 .ap-swatch.active { border-color: var(--ink); box-shadow: 0 0 0 2px var(--bg); }
+
+/* ==========================================================
+   通知效果演示（高仿 Windows 系统通知样式，原型演示）
+   正式版由操作系统原生通知显示（Windows 通知中心 / Mac 通知中心），
+   外观由系统决定，与原型模拟样式不同。
+   ========================================================== */
+.toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 90; display: flex; flex-direction: column; gap: 10px; }
+.toast {
+  width: 340px; max-width: calc(100vw - 40px);
+  background: var(--card); border: 1px solid var(--card-border); border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.28); padding: 12px 14px;
+  display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+  animation: toast-in .25s ease;
+}
+@keyframes toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+.toast-icon {
+  width: 34px; height: 34px; border-radius: 8px; background: var(--logo-grad); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; font-weight: 700;
+}
+.toast-main { flex: 1; min-width: 0; }
+.toast-app { font-size: 11px; color: var(--ink-3); font-weight: 600; }
+.toast-title { font-size: 13.5px; font-weight: 600; margin-top: 1px; }
+.toast-body { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+.toast-time { font-size: 11px; color: var(--ink-3); margin-top: 4px; }
+.toast-close { border: none; background: none; color: var(--ink-3); cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 4px; }
+.toast-close:hover { background: var(--bg-soft); }
