@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小财通 · 盯盘提醒（界面原型）</title>
+<link rel="stylesheet" href="style.css">
+<script>
+  // 原型演示：恢复上次选择的外观模式与主题颜色（正式版在「设置 → 外观」中提供）
+  (function () {
+    if (localStorage.getItem('xltc-theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    var a = localStorage.getItem('xltc-accent');
+    if (a) document.documentElement.dataset.accent = a;
+  })();
+</script>
+<style>
+  /* ---------- 盯盘提醒页专属样式（原型演示） ---------- */
+  .alert-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(12px, 1.5vw, 20px); margin-bottom: 16px; }
+  .alert-stats .item { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; }
+  .alert-stats .l { font-size: 12px; color: var(--ink-2); }
+  .alert-stats .v { font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .alert-stats .s { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+  .group-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin: 18px 0 10px; }
+  .group-title .cnt { font-size: 12px; color: var(--ink-3); font-weight: 400; }
+
+  /* 提醒列表行 */
+  .alert-card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  .alert-card .obj { min-width: 0; flex: 1; }
+  .alert-card .obj .n { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .alert-card .obj .d { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
+  .alert-card .cond { flex-shrink: 0; text-align: left; font-size: 13px; min-width: 180px; }
+  .alert-card .cond .c { background: var(--tag-blue-bg); color: var(--tag-blue-ink); border-radius: 8px; padding: 5px 10px; font-weight: 600; white-space: nowrap; }
+  .alert-card .cond .note { font-size: 11px; color: var(--ink-3); margin-top: 4px; }
+  .alert-card .last { flex-shrink: 0; font-size: 12px; color: var(--ink-3); text-align: right; min-width: 90px; }
+  .alert-card .last b { color: var(--ink-2); display: block; font-weight: 500; }
+  .alert-card .eff { flex-shrink: 0; font-size: 12px; color: var(--ink-3); text-align: right; min-width: 150px; }
+  .alert-card .eff b { color: var(--brand); display: block; font-weight: 600; font-size: 13px; }
+  .alert-card .eff span { display: block; margin-top: 2px; }
+  .alert-card .ops { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+  .icon-btn { border: none; background: none; cursor: pointer; color: var(--ink-3); font-size: 14px; padding: 4px; border-radius: 6px; }
+  .icon-btn:hover { background: var(--brand-soft); color: var(--brand); }
+  .icon-btn.del:hover { background: var(--tag-red-bg); color: var(--tag-red-ink); }
+  .alert-card.paused { opacity: .6; }
+
+  /* 开关 */
+  .switch { width: 38px; height: 21px; border-radius: 11px; background: var(--ink-3); opacity: .45; position: relative; cursor: pointer; transition: background .2s, opacity .2s; flex-shrink: 0; }
+  .switch::after { content: ''; position: absolute; width: 17px; height: 17px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .switch.on { background: var(--brand); opacity: 1; }
+  .switch.on::after { left: 19px; }
+
+  /* 历史记录 */
+  .hist-item { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px dashed var(--card-border); font-size: 13px; }
+  .hist-item:last-child { border-bottom: none; }
+  .hist-item .t { color: var(--ink-3); font-size: 12px; flex-shrink: 0; width: 52px; }
+  .hist-item .d { flex: 1; min-width: 0; }
+  .hist-item .d b { font-weight: 600; }
+  .hist-item .d .s { font-size: 12px; color: var(--ink-2); }
+  .hist-item .val { flex-shrink: 0; text-align: right; }
+  .hist-item .val .u { color: var(--up); font-weight: 600; }
+  .hist-item .val .dd { color: var(--down); font-weight: 600; }
+  .hist-item .st { flex-shrink: 0; font-size: 11px; color: var(--brand); background: var(--brand-soft); padding: 2px 8px; border-radius: 6px; }
+
+  /* 添加提醒弹层 */
+  .modal-mask { position: fixed; inset: 0; background: rgba(15, 15, 20, .4); display: none; align-items: center; justify-content: center; z-index: 60; }
+  .modal-mask.open { display: flex; }
+  .modal { width: min(500px, 92vw); max-height: 86vh; overflow: auto; background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 20px 22px; box-shadow: 0 18px 50px rgba(0,0,0,.25); }
+  .modal h3 { font-size: 16px; margin: 0 0 4px; }
+  .modal .m-sub { font-size: 12px; color: var(--ink-3); margin-bottom: 14px; }
+  .modal .m-sec { font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 14px 0 8px; }
+  .seg { display: flex; gap: 8px; flex-wrap: wrap; }
+  .seg .seg-btn { border: 1px solid var(--card-border); background: none; color: var(--ink-2); font-size: 13px; padding: 7px 14px; border-radius: 8px; cursor: pointer; }
+  .seg .seg-btn.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+  .opt-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 160px; overflow: auto; }
+  .opt { border: 1px solid var(--card-border); border-radius: 8px; padding: 8px 10px; font-size: 13px; cursor: pointer; color: var(--ink); }
+  .opt:hover { border-color: var(--brand); }
+  .opt.sel { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+  .cond-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+  .num-in { width: 90px; border: 1px solid var(--card-border); background: var(--bg); border-radius: 8px; padding: 7px 10px; font-size: 13px; color: var(--ink); }
+  .num-in:focus { outline: none; border-color: var(--brand); }
+  .modal .m-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .freq-note { font-size: 11px; color: var(--ink-3); background: var(--bg); border-radius: 8px; padding: 8px 10px; margin-top: 12px; line-height: 1.6; }
+
+  @media (max-width: 900px) {
+    .alert-stats { grid-template-columns: repeat(2, 1fr); }
+    .alert-card { flex-wrap: wrap; }
+    .alert-card .cond { min-width: 100%; padding-left: 0; }
+    .alert-card .last { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo"><span class="logo-dot"></span>小财通</div>
+    <nav class="nav" id="mainNav"></nav>
+    <div class="topbar-right">
+      <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
+      <span>示例数据 · 非真实持仓</span>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">盯盘提醒</div>
+  <div class="page-sub">达到条件自动桌面弹窗提醒 · 指数/赛道盘中每 5 分钟检查 · 场外基金每日收盘后检查 · 同一提醒当天不重复</div>
+
+  <!-- 操作区 -->
+  <div class="page-actions">
+    <button class="btn btn-sm">＋ 添加提醒</button>
+  </div>
+
+  <!-- 统计概览 -->
+  <div class="alert-stats">
+    <div class="item"><div class="l">生效中</div><div class="v">5</div><div class="s">指数 3 · 基金 2</div></div>
+    <div class="item"><div class="l">暂停</div><div class="v">2</div><div class="s">随时可恢复</div></div>
+    <div class="item"><div class="l">今日已触发</div><div class="v">1</div><div class="s">沪深300 涨破 4100</div></div>
+    <div class="item"><div class="l">桌面通知</div><div class="v">已开启</div><div class="s">软件运行时才弹</div></div>
+  </div>
+
+  <!-- 提前设置（未来生效）演示 -->
+  <div class="group-title">提前设置 · 未来生效 <span class="cnt">1 条 · 今晚设置、明天起生效</span></div>
+
+  <div class="alert-card" id="futureDemo">
+    <div class="obj">
+      <div class="n">易方达蓝筹精选混合 <span class="tag tag-green">混合型</span></div>
+      <div class="d">005827 · 持有 · 最新净值 2.4378</div>
+    </div>
+    <div class="cond"><div class="c">📉 单日跌超 3%</div><div class="note">涨跌幅条件 · 收盘后检查</div></div>
+    <div class="eff"><b>下一交易日生效</b><span>有效期：仅下一交易日 · 系统自动计算</span><span>📝 达到止损条件，检查是否按原计划卖出</span></div>
+    <div class="last"><b>—</b>未触发</div>
+    <div class="ops">
+      <span class="switch on" data-on="1"></span>
+      <button class="icon-btn" title="编辑">✎</button>
+      <button class="icon-btn del" title="删除">✕</button>
+    </div>
+  </div>
+
+  <!-- 我的基金提醒 -->
+  <div class="group-title" id="fundGroup">我的基金 <span class="cnt">3 条 · 每日收盘后检查净值</span></div>
+
+  <div class="alert-card">
+    <div class="obj">
+      <div class="n">易方达蓝筹精选混合 <span class="tag tag-green">混合型</span></div>
+      <div class="d">005827 · 持有 · 最新净值 2.4378</div>
+    </div>
+    <div class="cond"><div class="c">📉 单日跌超 3%</div><div class="note">涨跌幅条件 · 比昨日净值</div></div>
+    <div class="last"><b>08-26 20:08</b>上次触发</div>
+    <div class="ops">
+      <span class="switch on" data-on="1"></span>
+      <button class="icon-btn" title="编辑">✎</button>
+      <button class="icon-btn del" title="删除">✕</button>
+    </div>
+  </div>
+
+  <div class="alert-card">
+    <div class="obj">
+      <div class="n">中欧医疗健康混合A <span class="tag tag-green">混合型</span></div>
+      <div class="d">003095 · 持有 · 最新净值 1.5234</div>
+    </div>
+    <div class="cond"><div class="c">📈 单日涨超 5%</div><div class="note">涨跌幅条件 · 比昨日净值</div></div>
+    <div class="last"><b>08-24 20:10</b>上次触发</div>
+    <div class="ops">
+      <span class="switch" data-on="0"></span>
+      <button class="icon-btn" title="编辑">✎</button>
+      <button class="icon-btn del" title="删除">✕</button>
+    </div>
+  </div>
+
+  <div class="alert-card">
+    <div class="obj">
+      <div class="n">招商中证白酒指数A <span class="tag tag-blue">指数型</span></div>
+      <div class="d">161725 · 持有 · 最新净值 0.9826</div>
+    </div>
+    <div class="cond"><div class="c">🎯 净值跌破 0.95 元</div><div class="note">数值线条件 · 盯净值点位</div></div>
+    <div class="last"><b>—</b>未触发过</div>
+    <div class="ops">
+      <span class="switch on" data-on="1"></span>
+      <button class="icon-btn" title="编辑">✎</button>
+      <button class="icon-btn del" title="删除">✕</button>
+    </div>
+  </div>
+
+  <!-- 指数 / 赛道提醒 -->
+  <div class="group-title" id="mktGroup">指数 / 赛道 <span class="cnt">4 条 · 交易时段内每 5 分钟检查</span></div>
+
+  <div class="alert-card">
+    <div class="obj">
+      <div class="n">沪深300 <span class="tag tag-blue">指数</span></div>
+      <div class="d">现价 4,126.58 · +0.62%</div>
+    </div>
+    <div class="cond"><div class="c">🎯 涨破 4100 点</div><div class="note">数值线条件 · 盘中点位</div></div>
+    <div class="last"><b>今日 15:00</b>已触发 ✔</div>
+    <div class="ops">
+      <span class="switch on" data-on="1"></span>
+      <button class="icon-btn" title="编辑">✎</button>
+      <button class="icon-btn del" title="删除">✕</button>
+    </div>
+  </div>
+
+  <div class="alert-card">
+    <div class="obj">
+      <div class="n">纳斯达克100 <span class="tag tag-blue">指数</span></div>
+      <div class="d">现价 21,450.88 · +0.72%</div>
+    </div>
+    <div class="cond"><div class="c">📈 单日涨超 2%</div><div class="note">涨跌幅条件 · 比昨日收盘</div></div>
+    <div class="last"><b>08-27 23:05</b>上次触发</div>
+    <div class="ops">
+      <span class="switch on" data-on="1"></span>
+      <button class="icon-btn" title="编辑">✎</button>
+      <button class="icon-btn del" title="删除">✕</button>
+    </div>
+  </div>
+
+  <div class="alert-card">
+    <div class="obj">
+      <div class="n">黄金 <span class="tag tag-blue">赛道</span></div>
+      <div class="d">现价 576.20 元/克 · +0.35%</div>
+    </div>
+    <div class="cond"><div class="c">📉 单日跌超 1%</div><div class="note">涨跌幅条件 · 比昨日收盘</div></div>
+    <div class="last"><b>—</b>未触发过</div>
+    <div class="ops">
+      <span class="switch on" data-on="1"></span>
+      <button class="icon-btn" title="编辑">✎</button>
+      <button class="icon-btn del" title="删除">✕</button>
+    </div>
+  </div>
+
+  <div class="alert-card">
+    <div class="obj">
+      <div class="n">半导体 <span class="tag tag-blue">赛道</span></div>
+      <div class="d">关注赛道 · 当前 +1.2%</div>
+    </div>
+    <div class="cond"><div class="c">📈 单日涨超 3%</div><div class="note">涨跌幅条件 · 比昨日收盘</div></div>
+    <div class="last"><b>—</b>未触发过</div>
+    <div class="ops">
+      <span class="switch" data-on="0"></span>
+      <button class="icon-btn" title="编辑">✎</button>
+      <button class="icon-btn del" title="删除">✕</button>
+    </div>
+  </div>
+
+  <!-- 历史触发记录 -->
+  <div class="group-title">历史触发记录 <span class="cnt">最近 30 天 · 共 12 次</span></div>
+  <div class="card">
+    <div class="hist-item">
+      <div class="t">今日</div>
+      <div class="d"><b>沪深300 涨破 4100 点</b><div class="s">数值线条件 · 盘中检查</div></div>
+      <div class="val">4,126.58<span class="u"> +0.62%</span></div>
+      <span class="st">已弹窗</span>
+    </div>
+    <div class="hist-item">
+      <div class="t">08-28</div>
+      <div class="d"><b>中欧医疗健康A 单日跌超 2%</b><div class="s">涨跌幅条件 · 收盘后检查</div></div>
+      <div class="val">1.5234<span class="dd"> -2.14%</span></div>
+      <span class="st">已弹窗</span>
+    </div>
+    <div class="hist-item">
+      <div class="t">08-26</div>
+      <div class="d"><b>易方达蓝筹精选 单日涨超 1.5%</b><div class="s">涨跌幅条件 · 收盘后检查</div></div>
+      <div class="val">2.4378<span class="u"> +1.82%</span></div>
+      <span class="st">已弹窗</span>
+    </div>
+    <div class="hist-item">
+      <div class="t">08-26</div>
+      <div class="d"><b>沪深300 跌破 4050 点</b><div class="s">数值线条件 · 盘中检查</div></div>
+      <div class="val">4,042.10<span class="dd"> -0.85%</span></div>
+      <span class="st">已弹窗</span>
+    </div>
+  </div>
+
+  <!-- 添加提醒弹层 -->
+  <div class="modal-mask" id="addModal">
+    <div class="modal">
+      <h3>＋ 添加提醒</h3>
+      <div class="m-sub">达到条件后桌面弹窗通知 · 同一提醒当天只弹一次</div>
+
+      <div class="m-sec">① 选对象</div>
+      <div class="seg" id="objTab">
+        <button class="seg-btn active" data-tab="mkt">指数 / 赛道</button>
+        <button class="seg-btn" data-tab="fund">我的基金</button>
+      </div>
+      <div class="opt-list" id="mktList" style="margin-top:8px;">
+        <div class="opt">沪深300</div><div class="opt">上证指数</div><div class="opt">中证500</div>
+        <div class="opt">创业板指</div><div class="opt">恒生指数</div><div class="opt">恒生科技</div>
+        <div class="opt">纳斯达克100</div><div class="opt">标普500</div><div class="opt">黄金</div>
+        <div class="opt">半导体</div><div class="opt">人工智能</div><div class="opt">创新药</div>
+        <div class="opt">白酒</div><div class="opt">新能源</div><div class="opt">医药生物</div><div class="opt">红利低波</div>
+      </div>
+      <div class="opt-list" id="fundList" style="margin-top:8px; display:none;">
+        <div class="opt">易方达蓝筹精选混合</div><div class="opt">中欧医疗健康混合A</div>
+        <div class="opt">招商中证白酒指数A</div><div class="opt">天弘沪深300ETF联接A</div>
+        <div class="opt">易方达中证海外50ETF联接A</div>
+      </div>
+
+      <div class="m-sec">② 设条件</div>
+      <div class="seg" id="condTab">
+        <button class="seg-btn active" data-cond="pct">涨跌幅 · 比昨日收盘</button>
+        <button class="seg-btn" data-cond="line">数值线 · 涨破/跌破点位</button>
+      </div>
+      <div class="cond-row" style="margin-top:10px;">
+        <span id="dirText">比昨日收盘</span>
+        <select id="dirSel" class="num-in" style="width:auto;">
+          <option>涨超</option><option>跌超</option>
+        </select>
+        <input class="num-in" id="numIn" type="number" value="2.0" step="0.1">
+        <span id="unitText">%</span>
+      </div>
+
+      <div class="freq-note" id="freqNote">指数 / 赛道：交易时段内每 5 分钟检查一次<br>场外基金：每日收盘后检查一次（盘中无实时估值）</div>
+
+      <div class="m-sec">③ 有效期 <span style="color:var(--ink-3); font-weight:400;">只需选一个快捷选项</span></div>
+      <div class="seg" id="validTab">
+        <button class="seg-btn" data-valid="once">仅下一交易日</button>
+        <button class="seg-btn" data-valid="forever">持续到触发</button>
+        <button class="seg-btn" data-valid="range">自定义时间范围</button>
+      </div>
+      <div class="freq-note" id="validDesc" style="margin-top:8px;">点击上方选项查看说明</div>
+      <div class="cond-row" id="dateRow" style="margin-top:8px; display:none;">
+        <span>开始</span><input class="num-in" id="dateFrom" type="date" style="width:auto;">
+        <span>结束</span><input class="num-in" id="dateTo" type="date" style="width:auto;">
+      </div>
+
+      <div class="m-sec">④ 备注（选填）</div>
+      <textarea class="num-in" id="noteIn" style="width:100%; height:56px; resize:none;" placeholder="例如：达到自己的止损条件，检查是否按原计划卖出 —— 备注仅你自己可见，小财通不解读、不代为执行"></textarea>
+
+      <div class="m-foot">
+        <button class="btn btn-ghost btn-sm" id="cancelBtn">取消</button>
+        <button class="btn btn-sm" id="saveBtn">保存提醒</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。「＋ 添加提醒」可打开面板演示完整流程：选对象 → 设条件 → 有效期快捷选项 → 备注 → 保存。「提前设置 · 未来生效」分组是新增需求演示。<b>本页已定稿（2026-08-29）</b>：有效期方案已确认（仅下一交易日/持续到触发/自定义时间范围，底层统一为起止日期）；备注仅你自己可见，小财通不解读、不构成建议、不代为买卖。外观方案与响应式布局已确认（2026-08-29）。</div>
+</main>
+
+<script src="nav.js"></script>
+<script src="theme.js"></script>
+<script>
+(function () {
+  var modal = document.getElementById('addModal');
+  var addBtn = document.querySelector('.page-actions .btn');
+
+  /* ---------- 添加提醒弹层 ---------- */
+  addBtn.addEventListener('click', function () { modal.classList.add('open'); });
+  document.getElementById('cancelBtn').addEventListener('click', function () { modal.classList.remove('open'); });
+  modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('open'); });
+
+  /* 对象 tab */
+  var mktList = document.getElementById('mktList'), fundList = document.getElementById('fundList');
+  document.getElementById('objTab').addEventListener('click', function (e) {
+    var b = e.target.closest('.seg-btn'); if (!b) return;
+    document.querySelectorAll('#objTab .seg-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+    mktList.style.display = b.dataset.tab === 'mkt' ? '' : 'none';
+    fundList.style.display = b.dataset.tab === 'fund' ? '' : 'none';
+    setFreq();
+  });
+  function setFreq () {
+    var isFund = fundList.style.display !== 'none';
+    document.getElementById('freqNote').innerHTML = isFund
+      ? '场外基金：每日收盘后检查一次（盘中无实时估值）'
+      : '指数 / 赛道：交易时段内每 5 分钟检查一次<br>场外基金：每日收盘后检查一次（盘中无实时估值）';
+  }
+  function bindOpts (list) {
+    list.addEventListener('click', function (e) {
+      var o = e.target.closest('.opt'); if (!o) return;
+      list.querySelectorAll('.opt').forEach(function (x) { x.classList.remove('sel'); });
+      o.classList.add('sel');
+    });
+  }
+  bindOpts(mktList); bindOpts(fundList);
+
+  /* 条件类型 */
+  document.getElementById('condTab').addEventListener('click', function (e) {
+    var b = e.target.closest('.seg-btn'); if (!b) return;
+    document.querySelectorAll('#condTab .seg-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+    var isLine = b.dataset.cond === 'line';
+    document.getElementById('dirText').textContent = isLine ? '点位' : '比昨日收盘';
+    document.getElementById('dirSel').innerHTML = isLine
+      ? '<option>涨破</option><option>跌破</option>'
+      : '<option>涨超</option><option>跌超</option>';
+    document.getElementById('unitText').textContent = isLine ? '点' : '%';
+    document.getElementById('numIn').value = isLine ? '4100' : '2.0';
+  });
+
+  /* ---------- 开关 ---------- */
+  function toggleSw () {
+    var on = this.classList.toggle('on');
+    this.dataset.on = on ? '1' : '0';
+    var card = this.closest('.alert-card');
+    card.classList.toggle('paused', !on);
+  }
+  document.querySelectorAll('.switch').forEach(function (sw) { sw.addEventListener('click', toggleSw); });
+
+  /* ---------- 删除（演示） ---------- */
+  function delRow () {
+    var card = this.closest('.alert-card');
+    if (confirm('删除这条提醒？')) card.remove();
+  }
+  document.querySelectorAll('.icon-btn.del').forEach(function (b) { b.addEventListener('click', delRow); });
+
+  /* ---------- 有效期（3 个快捷选项 · 底层按起止日期统一处理） ---------- */
+  var VALID_DESC = {
+    once:    '仅下一交易日：系统自动计算下一个实际交易日（如周五设置 → 下周一生效），无需填日期。当天检查结束后自动失效。',
+    forever: '持续到触发：从今天（或你选的开始日期）起一直监控，触发一次后自动失效。',
+    range:   '自定义时间范围：填开始和结束日期，范围内每天检查，到期自动失效。'
+  };
+  var curValid = '';
+  var validBtns = document.querySelectorAll('#validTab .seg-btn');
+  var dateRow = document.getElementById('dateRow');
+  var dateFrom = document.getElementById('dateFrom');
+  var dateTo = document.getElementById('dateTo');
+  validBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      validBtns.forEach(function (x) { x.classList.toggle('active', x === b); });
+      curValid = b.dataset.valid;
+      document.getElementById('validDesc').textContent = VALID_DESC[curValid];
+      if (curValid === 'once') {
+        dateRow.style.display = 'none';
+      } else if (curValid === 'forever') {
+        dateRow.style.display = '';
+        dateTo.style.display = 'none';
+        dateRow.querySelector('span:nth-child(3)').style.display = 'none';
+      } else {
+        dateRow.style.display = '';
+        dateTo.style.display = '';
+        dateRow.querySelector('span:nth-child(3)').style.display = '';
+      }
+    });
+  });
+
+  /* ---------- 保存提醒（演示） ---------- */
+  document.getElementById('saveBtn').addEventListener('click', function () {
+    var obj = document.querySelector('.opt-list .opt.sel');
+    if (!obj) { alert('请先在「选对象」里点选一个对象'); return; }
+    if (!curValid) { alert('请先点选一个有效期快捷选项'); return; }
+    var df = dateFrom.value, dt = dateTo.value;
+    if (curValid === 'range' && (!df || !dt)) { alert('自定义时间范围需要填开始和结束日期'); return; }
+    var isFund = fundList.style.display !== 'none';
+    var condType = document.querySelector('#condTab .seg-btn.active').dataset.cond;
+    var dir = document.getElementById('dirSel').value;
+    var num = document.getElementById('numIn').value;
+    var up = dir.indexOf('涨') === 0;
+    var condLabel = condType === 'line'
+      ? '🎯 ' + dir + ' ' + num + ' 点'
+      : (up ? '📈 ' : '📉 ') + '单日' + dir + ' ' + num + '%';
+    var startText, validText;
+    if (curValid === 'once') {
+      startText = '下一交易日生效';
+      validText = '有效期：仅下一交易日 · 系统自动计算';
+    } else if (curValid === 'forever') {
+      startText = df ? '从 ' + df + ' 起' : '立即生效';
+      validText = '有效期：持续到触发';
+    } else {
+      startText = '从 ' + df + ' 起';
+      validText = '有效期：' + df + ' ~ ' + dt;
+    }
+    var note = document.getElementById('noteIn').value.trim();
+
+    var row = document.createElement('div');
+    row.className = 'alert-card';
+    row.innerHTML =
+      '<div class="obj"><div class="n">' + obj.textContent +
+        ' <span class="tag tag-blue">' + (isFund ? '混合型' : '指数') + '</span></div>' +
+      '<div class="d">' + (isFund ? '从你的持仓添加' : '从预设清单添加') + '</div></div>' +
+      '<div class="cond"><div class="c">' + condLabel + '</div><div class="note">' +
+        (isFund ? '涨跌幅条件 · 收盘后检查' : '盘中每 5 分钟检查') + '</div></div>' +
+      '<div class="eff"><b>' + startText + '</b><span>' + validText + '</span>' +
+        (note ? '<span>📝 ' + note + '</span>' : '') + '</div>' +
+      '<div class="last"><b>—</b>未触发</div>' +
+      '<div class="ops"><span class="switch on" data-on="1"></span>' +
+        '<button class="icon-btn" title="编辑">✎</button>' +
+        '<button class="icon-btn del" title="删除">✕</button></div>';
+    (isFund ? document.getElementById('fundGroup') : document.getElementById('mktGroup')).after(row);
+    row.querySelector('.switch').addEventListener('click', toggleSw);
+    row.querySelector('.del').addEventListener('click', delRow);
+
+    modal.classList.remove('open');
+    validBtns.forEach(function (x) { x.classList.remove('active'); });
+    curValid = '';
+    dateRow.style.display = 'none';
+    dateTo.style.display = '';
+    dateRow.querySelector('span:nth-child(3)').style.display = '';
+    document.getElementById('noteIn').value = '';
+    document.querySelectorAll('.opt').forEach(function (x) { x.classList.remove('sel'); });
+  });
+}());
+</script>
+
+</body>
+</html>

@@ -1,0 +1,466 @@
+/* ==========================================================
+   小财通 · 界面原型样式（示例数据，非真实数据）
+   风格：简洁现代、卡片式、留白、克制的数字展示
+
+   外观系统（原型演示版）：
+   - 外观模式：浅色 / 深色（data-theme，跟随系统/日出日落/自定义时间正式版提供）
+   - 主题颜色：6 种预设强调色（data-accent，正式版在「设置 → 外观」中提供）
+
+   本配色方案已于 2026-08-29 经用户确认采用
+
+   配色语义（用户 2026-08-29 要求）：
+   - 主题色（用户可选）：只用于品牌和交互元素（导航选中、按钮、链接、重点卡片、开关）
+   - 红色：只表示上涨 / 盈利 / 正收益
+   - 绿色：只表示下跌 / 亏损 / 负收益
+   - 黄/橙：风险、警告、待观察等提醒
+   - 灰：普通文字与次级信息
+   ========================================================== */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ==========================================================
+   主题色定义（品牌/交互色）
+   每种主题色定义两套：浅色模式用（--brand 等）、深色模式用（--*-dark）
+   ========================================================== */
+
+/* 默认主题色：蓝色 */
+:root {
+  --brand: #2f6fed;
+  --brand-dark: #5b8df8;
+  --brand-soft: #eaf1fd;
+  --brand-soft-dark: #16294a;
+  --ghost-border: #c5d6f7;
+  --ghost-border-dark: #2d4a8f;
+  --hero-grad: linear-gradient(135deg, #2a63e8, #4f86f7);
+  --hero-grad-dark: linear-gradient(135deg, #1b3f8f, #2a63d4);
+  --logo-grad: linear-gradient(135deg, #2f6fed, #5b8df8);
+}
+
+/* 雾蓝：柔和低饱和的蓝灰 */
+[data-accent="mistblue"] {
+  --brand: #5a8fd6;
+  --brand-dark: #8ab2ea;
+  --brand-soft: #eaf2fc;
+  --brand-soft-dark: #1c3249;
+  --ghost-border: #c8dcf0;
+  --ghost-border-dark: #33527a;
+  --hero-grad: linear-gradient(135deg, #4a7fbe, #6fa3dd);
+  --hero-grad-dark: linear-gradient(135deg, #264f85, #3d6fae);
+  --logo-grad: linear-gradient(135deg, #5a8fd6, #8ab2ea);
+}
+
+/* 青色：偏蓝的清新青（注意与"跌=绿"区分，色相偏蓝） */
+[data-accent="cyan"] {
+  --brand: #14a3b0;
+  --brand-dark: #35c6d1;
+  --brand-soft: #e0f4f6;
+  --brand-soft-dark: #0f3236;
+  --ghost-border: #b8e2e6;
+  --ghost-border-dark: #1e5660;
+  --hero-grad: linear-gradient(135deg, #0e8a96, #1fb8c4);
+  --hero-grad-dark: linear-gradient(135deg, #0b4f57, #14717a);
+  --logo-grad: linear-gradient(135deg, #14a3b0, #35c6d1);
+}
+
+/* 紫色 */
+[data-accent="purple"] {
+  --brand: #7a5cf0;
+  --brand-dark: #9d85f7;
+  --brand-soft: #eee9fd;
+  --brand-soft-dark: #221a49;
+  --ghost-border: #d3c8f8;
+  --ghost-border-dark: #3d3070;
+  --hero-grad: linear-gradient(135deg, #6a4be0, #8f74f0);
+  --hero-grad-dark: linear-gradient(135deg, #2f2480, #4a3aa8);
+  --logo-grad: linear-gradient(135deg, #7a5cf0, #9d85f7);
+}
+
+/* 橙色（注意：与"风险/警告=橙黄"语义接近，选择后风险标签仍是固定橙，靠深浅区分） */
+[data-accent="orange"] {
+  --brand: #f07f2a;
+  --brand-dark: #ffa35c;
+  --brand-soft: #fdf0e2;
+  --brand-soft-dark: #3d2a14;
+  --ghost-border: #f6d8b8;
+  --ghost-border-dark: #6e4a1e;
+  --hero-grad: linear-gradient(135deg, #e0701e, #f29a4d);
+  --hero-grad-dark: linear-gradient(135deg, #7a3a0e, #a55a20);
+  --logo-grad: linear-gradient(135deg, #f07f2a, #ffa35c);
+}
+
+/* 灰蓝 */
+[data-accent="slate"] {
+  --brand: #5d7a9e;
+  --brand-dark: #8ba4c4;
+  --brand-soft: #eaf0f6;
+  --brand-soft-dark: #1c2836;
+  --ghost-border: #c5d3e2;
+  --ghost-border-dark: #33465c;
+  --hero-grad: linear-gradient(135deg, #4d6b90, #7490b5);
+  --hero-grad-dark: linear-gradient(135deg, #253c58, #3a5577);
+  --logo-grad: linear-gradient(135deg, #5d7a9e, #8ba4c4);
+}
+
+/* ==========================================================
+   浅色主题（默认）：柔和暖白 + 当前主题色
+   ========================================================== */
+:root {
+  --bg: #f7f5f1;            /* 页面底色：柔和暖白（非纯白） */
+  --bg-soft: #f1efe9;       /* 更浅底色（列表表头/提示条）：暖灰 */
+  --card: #fdfcf9;          /* 卡片：近白微暖 */
+  --ink: #2b2a26;           /* 主文字：暖黑 */
+  --ink-2: #6b675e;         /* 次要文字：暖灰 */
+  --ink-3: #9c978c;         /* 弱化文字 */
+
+  --up: #e5484d;            /* 涨 / 盈利：红（固定，不受主题色影响） */
+  --down: #12a150;          /* 跌 / 亏损：绿（固定） */
+  --flat: #9c978c;          /* 平 */
+
+  /* 标签体系（固定色，不随主题色变化）：
+     利好=蓝  利空=橙  待观察=黄  分类=灰 */
+  --tag-green-bg: #eaf1fd; --tag-green-ink: #2f6fed;
+  --tag-red-bg: #fdf1e6;    --tag-red-ink: #d97b0c;
+  --tag-orange-bg: #faf4dd; --tag-orange-ink: #c9a227;
+  --tag-blue-bg: #eef1f5;   --tag-blue-ink: #5e6d82;
+
+  --note-bg: #faf3e4;       --note-ink: #a8792c;  /* 历史持仓提示条 */
+
+  --line: #eae6de;          /* 分割线：暖灰 */
+  --shadow: 0 1px 2px rgba(43,42,38,.04), 0 4px 16px rgba(43,42,38,.06);
+  --topbar: rgba(247,245,241,.92);
+  --radius: 14px;
+}
+
+/* ==========================================================
+   深色主题：柔和墨灰 + 主题色深色变体
+   涨跌色提亮；标签"深底亮字"；品牌色用 --*-dark 变体
+   ========================================================== */
+[data-theme="dark"] {
+  --bg: #1b1d22;            /* 页面底色：柔和墨灰 */
+  --bg-soft: #20242b;
+  --card: #242830;
+  --ink: #e8eaee;
+  --ink-2: #a4abb6;
+  --ink-3: #6e7684;
+
+  --brand: var(--brand-dark);
+  --brand-soft: var(--brand-soft-dark);
+  --ghost-border: var(--ghost-border-dark);
+  --hero-grad: var(--hero-grad-dark);
+
+  --up: #ff7377;            /* 涨：提亮红 */
+  --down: #33cf80;          /* 跌：提亮绿 */
+  --flat: #6e7684;
+
+  --tag-green-bg: #16294a; --tag-green-ink: #74a9ff;
+  --tag-red-bg: #3d2a14;    --tag-red-ink: #f0a04a;
+  --tag-orange-bg: #3d3314; --tag-orange-ink: #e6c64d;
+  --tag-blue-bg: #262b35;   --tag-blue-ink: #8b95a5;
+
+  --note-bg: #352c1d;       --note-ink: #e2b76e;
+
+  --line: #2e333c;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.32);
+  --topbar: rgba(27,29,34,.92);
+}
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.6;
+  transition: background .3s, color .3s;
+}
+html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚动条 */
+
+/* ---------- 顶部导航 ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--topbar);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  max-width: 2400px; margin: 0 auto;
+  display: flex; align-items: center;
+  padding: 0 clamp(24px, 2.5vw, 32px); /* 左右安全边距 24~32px，跟随窗口 */
+  height: 56px;
+}
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 17px; margin-right: 32px; }
+.logo-dot {
+  width: 22px; height: 22px; border-radius: 7px;
+  background: var(--logo-grad); /* 跟随主题色 */
+}
+.nav { display: flex; gap: 4px; }
+.nav a {
+  text-decoration: none; color: var(--ink-2);
+  padding: 6px 14px; border-radius: 9px; font-size: 14px;
+  transition: all .15s;
+}
+.nav a:hover { background: var(--brand-soft); color: var(--brand); }
+.nav a.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--ink-3); font-size: 13px; }
+
+/* 顶栏窄屏适配：优先保住导航，隐藏次要文字、压缩间距 */
+@media (max-width: 980px) { .topbar-right > span { display: none; } }
+@media (max-width: 860px) {
+  .nav a { padding: 6px 8px; font-size: 13px; }
+  .logo { margin-right: 16px; font-size: 15px; }
+}
+
+/* ---------- 页面容器 ---------- */
+.page { max-width: 2400px; margin: 0 auto; padding: 24px clamp(24px, 2.5vw, 32px) 60px; }
+.page-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.page-sub { color: var(--ink-2); font-size: 13px; margin-bottom: 20px; }
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  transition: background .3s, box-shadow .3s;
+}
+.card-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.card-title .hint { font-size: 12px; color: var(--ink-3); font-weight: 400; }
+.card-more { margin-left: auto; font-size: 12px; color: var(--brand); text-decoration: none; font-weight: 400; }
+
+/* ---------- 网格 ----------
+   列宽用 fr 自动跟随窗口宽度铺开（宽屏拉宽、无大片留白）；
+   卡片 min-width:0 防止内容把列撑破（避免横向滚动条）；
+   窄屏（≤900px）折叠为单列自动重排。 */
+.grid { display: grid; gap: clamp(12px, 1.5vw, 20px); }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-3 { grid-template-columns: 1.4fr 1fr 1fr; }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid > * { min-width: 0; }
+@media (max-width: 1200px) { .grid-3 { grid-template-columns: 1.2fr 1fr 1fr; } }
+@media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+/* ---------- 数字 ---------- */
+.num { font-variant-numeric: tabular-nums; }
+.up   { color: var(--up); }
+.down { color: var(--down); }
+.flat { color: var(--flat); }
+.big  { font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+.small { font-size: 12px; }
+
+/* ---------- 资产总览 ---------- */
+.asset-hero {
+  background: var(--hero-grad); /* 重点卡片：跟随主题色 */
+  color: var(--hero-amount, #ffffff);
+  border-radius: var(--radius);
+  padding: 26px 28px; box-shadow: var(--shadow);
+  transition: background .3s;
+}
+.asset-hero .label { font-size: 13px; opacity: .85; }
+.asset-hero .amount { font-size: 34px; font-weight: 700; letter-spacing: -.5px; margin: 6px 0 2px; }
+.asset-hero .row { display: flex; gap: 32px; margin-top: 16px; flex-wrap: wrap; }
+.asset-hero .row .item { font-size: 13px; }
+.asset-hero .row .item b { font-size: 17px; font-weight: 600; display: block; }
+.asset-hero .up, .asset-hero .down { color: inherit; font-weight: 600; }
+
+/* ---------- 指数速览 ---------- */
+.idx-row {
+  display: flex; align-items: center;
+  padding: 10px 2px; border-bottom: 1px solid var(--line);
+}
+.idx-row:last-child { border-bottom: none; }
+.idx-name { flex: 1; font-weight: 500; }
+.idx-name small { display: block; color: var(--ink-3); font-weight: 400; }
+.idx-val { text-align: right; }
+.idx-val b { display: block; font-size: 15px; font-weight: 600; }
+.idx-val span { font-size: 12px; }
+
+/* ---------- 提醒列表 ----------
+   语义：蓝=信息（净值/经理变动），橙=警告（连跌/触发条件）；固定色不随主题色 */
+.alert-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 2px; border-bottom: 1px solid var(--line);
+}
+.alert-item:last-child { border-bottom: none; }
+.alert-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  margin-top: 7px; flex-shrink: 0;
+}
+.alert-dot.orange { background: #f5a623; }
+.alert-dot.blue { background: #2f6fed; }
+.alert-dot.red { background: #d97b0c; } /* 风险提醒：橙 */
+.alert-item .t { flex: 1; }
+.alert-item .t b { font-weight: 600; font-size: 13.5px; }
+.alert-item .t p { color: var(--ink-2); font-size: 12.5px; }
+.alert-item .time { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+
+/* ---------- 消息列表 ---------- */
+.msg-item {
+  padding: 10px 2px; border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.msg-item:last-child { border-bottom: none; }
+.msg-item:hover { background: var(--bg-soft); }
+.msg-tags { display: flex; gap: 6px; margin-bottom: 4px; align-items: center; }
+.tag {
+  font-size: 11px; padding: 1px 8px; border-radius: 20px; font-weight: 500;
+}
+.tag-green { background: var(--tag-green-bg); color: var(--tag-green-ink); }   /* 利好（蓝） */
+.tag-red { background: var(--tag-red-bg); color: var(--tag-red-ink); }         /* 利空（橙） */
+.tag-orange { background: var(--tag-orange-bg); color: var(--tag-orange-ink); } /* 待观察（黄） */
+.tag-blue { background: var(--tag-blue-bg); color: var(--tag-blue-ink); }      /* 分类（灰） */
+.msg-item .t { font-size: 13.5px; }
+.msg-item .m { color: var(--ink-2); font-size: 12.5px; margin-top: 2px; }
+.msg-item .foot { color: var(--ink-3); font-size: 12px; margin-top: 4px; }
+
+/* ---------- 值得关注 ---------- */
+.interest-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 2px; border-bottom: 1px solid var(--line);
+}
+.interest-item:last-child { border-bottom: none; }
+.interest-item .t { flex: 1; }
+.interest-item .t b { font-weight: 600; font-size: 13.5px; }
+.interest-item .t p { color: var(--ink-2); font-size: 12.5px; }
+
+/* ---------- 基金列表（我的基金页） ---------- */
+.fund-bar {
+  display: grid; grid-template-columns: 1.2fr 1.6fr 1fr 1fr 1fr 1fr;
+  gap: 12px; align-items: center;
+  padding: 12px 16px; background: var(--bg-soft);
+  border-radius: 10px; font-size: 12px; color: var(--ink-3);
+  margin-bottom: 8px;
+}
+.fund-card {
+  display: grid; grid-template-columns: 1.2fr 1.6fr 1fr 1fr 1fr 1fr;
+  gap: 12px; align-items: center;
+  background: var(--card); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px;
+  margin-bottom: 10px; transition: transform .12s, background .3s;
+  cursor: pointer;
+}
+.fund-card > * { min-width: 0; } /* 防止窄屏下列被内容撑破 */
+.fund-card:hover { transform: translateY(-1px); }
+
+/* 窄屏：基金卡片重排为 2 列（名称/类型占整行，数字两两并排），表头隐藏 */
+@media (max-width: 760px) {
+  .fund-bar { display: none; }
+  .fund-card { grid-template-columns: 1fr 1fr; row-gap: 8px; }
+  .fund-name, .fund-meta { grid-column: 1 / -1; }
+  .fund-cell { text-align: right; }
+}
+.fund-name b { font-size: 14.5px; font-weight: 600; }
+.fund-name small { display: block; color: var(--ink-3); font-size: 12px; font-weight: 400; }
+.fund-meta { font-size: 12.5px; color: var(--ink-2); }
+.fund-meta .tag { display: inline-block; margin-right: 4px; }
+.fund-cell b { font-size: 14.5px; font-weight: 600; }
+.fund-cell span { display: block; font-size: 12px; color: var(--ink-3); }
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: none; cursor: pointer;
+  background: var(--brand); color: #fff;   /* 主要按钮：跟随主题色 */
+  padding: 9px 18px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  transition: all .15s;
+}
+.btn:hover { opacity: .9; }
+.btn-ghost {
+  background: transparent; color: var(--brand);
+  border: 1px solid var(--ghost-border); font-weight: 500;
+}
+.btn-ghost:hover { background: var(--brand-soft); opacity: 1; }
+.btn-sm { padding: 6px 12px; font-size: 12.5px; border-radius: 8px; }
+
+/* ---------- 页头操作区 ---------- */
+.page-actions { display: flex; gap: 10px; justify-content: flex-end; margin-bottom: 16px; }
+
+/* ---------- 历史持仓 ---------- */
+.history-note {
+  background: var(--note-bg); color: var(--note-ink);
+  font-size: 12.5px; padding: 10px 16px; border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+/* ---------- 底部提示 ---------- */
+.demo-note {
+  margin-top: 40px; text-align: center;
+  color: var(--ink-3); font-size: 12px;
+  background: var(--bg-soft); border-radius: 10px; padding: 12px;
+}
+
+/* ==========================================================
+   市场速览（时段感知 · 分区固定+自动排序 · 原型演示）
+   内容永不消失：重点市场放大（primary），其他市场保留紧凑行
+   ========================================================== */
+.mkt-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px; border-radius: 10px;
+  border-bottom: 1px solid var(--line);
+  transition: background .3s;
+}
+.mkt-row:last-child { border-bottom: none; }
+.mkt-row.primary {
+  background: var(--brand-soft);       /* 重点市场：浅色底突出 */
+  border-bottom-color: transparent;
+  margin: 2px 0;
+}
+.mkt-row.primary .mkt-name { font-size: 15px; font-weight: 700; }
+.mkt-row.primary .mkt-val b { font-size: 20px; }
+.mkt-row.primary .mkt-val span { font-size: 14px; }
+.mkt-name { flex: 1; font-weight: 500; font-size: 13.5px; }
+.mkt-name small { display: block; color: var(--ink-3); font-weight: 400; font-size: 12px; }
+.mkt-val { text-align: right; }
+.mkt-val b { display: block; font-size: 15px; font-weight: 600; }
+.mkt-val span { font-size: 12px; }
+.mkt-status {
+  font-size: 11px; padding: 2px 9px; border-radius: 20px;
+  background: var(--tag-blue-bg); color: var(--tag-blue-ink);  /* 中性灰蓝状态标签 */
+  white-space: nowrap;
+}
+.mkt-status.live {
+  background: var(--brand-soft); color: var(--brand);           /* 交易中：品牌色 */
+  font-weight: 600;
+}
+.mkt-status.warn { background: var(--tag-orange-bg); color: var(--tag-orange-ink); } /* 盘前/盘后 */
+.mkt-divider { height: 1px; background: var(--line); margin: 6px 0; }
+.fund-note {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; font-size: 13px;
+  color: var(--ink-2); background: var(--bg-soft);
+  border-radius: 10px;
+}
+.fund-note .dot { width: 8px; height: 8px; border-radius: 50%; background: #f5a623; flex-shrink: 0; }
+.fund-note .dot.done { background: var(--brand); } /* 净值已更新：品牌蓝（不用绿色，避免与"跌"冲突） */
+.fund-note b { color: var(--ink); font-weight: 600; }
+
+/* ==========================================================
+   外观/时段预览面板（原型演示用）
+   正式版在「设置」中提供完整设置
+   ========================================================== */
+.appearance-panel {
+  position: fixed; top: 60px; right: 20px; z-index: 100;
+  width: 300px; padding: 16px;
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.22);
+  border: 1px solid var(--line);
+  display: none;
+}
+.appearance-panel.open { display: block; }
+.appearance-panel.sim-panel { right: 180px; }
+.ap-head { font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
+.ap-head-note { font-size: 11px; color: var(--ink-3); font-weight: 400; }
+.ap-sec { margin-top: 14px; font-size: 12px; color: var(--ink-3); }
+.ap-modes { display: flex; gap: 8px; margin-top: 6px; }
+.ap-mode {
+  flex: 1; padding: 6px 0; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg-soft);
+  color: var(--ink-2); cursor: pointer; font-size: 12.5px;
+}
+.ap-mode.active { background: var(--brand-soft); color: var(--brand); border-color: var(--brand); font-weight: 600; }
+.ap-hint { font-size: 11px; color: var(--ink-3); margin-top: 6px; }
+.ap-swatches { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.ap-swatch {
+  width: 28px; height: 28px; border-radius: 50%;
+  cursor: pointer; border: 2px solid transparent; padding: 0;
+}
+.ap-swatch.active { border-color: var(--ink); box-shadow: 0 0 0 2px var(--bg); }

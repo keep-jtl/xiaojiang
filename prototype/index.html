@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小财通 · 首页（界面原型）</title>
+<link rel="stylesheet" href="style.css">
+<script>
+  // 原型演示：恢复上次选择的外观模式与主题颜色（正式版在「设置 → 外观」中提供）
+  (function () {
+    if (localStorage.getItem('xltc-theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    var a = localStorage.getItem('xltc-accent');
+    if (a) document.documentElement.dataset.accent = a;
+  })();
+</script>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo"><span class="logo-dot"></span>小财通</div>
+    <nav class="nav" id="mainNav"></nav>
+    <div class="topbar-right">
+      <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
+      <button id="sessionBtn" class="btn btn-ghost btn-sm">⏱ A股交易中</button>
+      <span>示例数据 · 非真实持仓</span>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">早上好 👋</div>
+  <div class="page-sub">你的钱和今天的市场，都在这里了。</div>
+
+  <!-- 第一行：资产总览 + 市场速览 -->
+  <div class="grid grid-3" style="margin-bottom:16px;">
+    <!-- 资产总览 -->
+    <div class="asset-hero">
+      <div class="label">我的总资产</div>
+      <div class="amount num">¥ 128,456.32</div>
+      <div class="small" style="opacity:.85;">今日盈亏 <span class="num"><b>+512.80</b>（+0.40%）</span></div>
+      <div class="row">
+        <div class="item">累计收益<b class="num">+23,456.70</b></div>
+        <div class="item">持仓收益率<b class="num">+22.3%</b></div>
+        <div class="item">持有基金<b>6 只</b></div>
+      </div>
+    </div>
+
+    <!-- 市场速览（时段感知 · 分区固定+自动排序：重点放大、其他保留） -->
+    <div class="card">
+      <div class="card-title">市场速览 <span class="hint" id="sessionHero">A股交易中 · 重点看这里</span> <a class="card-more" href="#">看全部 →</a></div>
+
+      <div class="mkt-row primary" data-mkt="sh">
+        <div class="mkt-name">沪深300<small>周一至周五 9:30-15:00</small></div>
+        <span class="mkt-status live">交易中</span>
+        <div class="mkt-val"><b class="num up">4,126.58</b><span class="num up">+0.62%</span></div>
+      </div>
+
+      <div class="mkt-row primary" data-mkt="sz">
+        <div class="mkt-name">上证指数<small>周一至周五 9:30-15:00</small></div>
+        <span class="mkt-status live">交易中</span>
+        <div class="mkt-val"><b class="num up">3,328.15</b><span class="num up">+0.38%</span></div>
+      </div>
+
+      <div class="mkt-row" data-mkt="hk">
+        <div class="mkt-name">恒生指数<small>周一至周五 9:30-16:00</small></div>
+        <span class="mkt-status live">交易中</span>
+        <div class="mkt-val"><b class="num up">19,876.42</b><span class="num up">+1.05%</span></div>
+      </div>
+
+      <div class="mkt-row" data-mkt="us">
+        <div class="mkt-name">标普500<small>美东 9:30-16:00（夏令时 21:30 开盘）</small></div>
+        <span class="mkt-status">未开盘</span>
+        <div class="mkt-val"><b class="num up">6,082.30</b><span class="num up">+0.31%</span></div>
+      </div>
+
+      <div class="mkt-row" data-mkt="us">
+        <div class="mkt-name">纳斯达克100<small>美东 9:30-16:00（夏令时 21:30 开盘）</small></div>
+        <span class="mkt-status">未开盘</span>
+        <div class="mkt-val"><b class="num up">21,450.88</b><span class="num up">+0.72%</span></div>
+      </div>
+
+      <div class="mkt-row" data-mkt="us">
+        <div class="mkt-name">道琼斯<small>美东 9:30-16:00（夏令时 21:30 开盘）</small></div>
+        <span class="mkt-status">未开盘</span>
+        <div class="mkt-val"><b class="num down">44,920.15</b><span class="num down">-0.18%</span></div>
+      </div>
+
+      <div class="mkt-divider"></div>
+
+      <div class="fund-note">
+        <span class="dot"></span>
+        <b>净值更新中</b>
+        <p>今日净值 20:00 后更新，当前显示昨日净值 · 昨日你的基金 +0.40%</p>
+      </div>
+    </div>
+
+    <!-- 今日提醒 -->
+    <div class="card">
+      <div class="card-title">今日提醒 <a class="card-more" href="#">管理 →</a></div>
+      <div class="alert-item">
+        <span class="alert-dot orange"></span>
+        <div class="t"><b>沪深300 涨破 4100 点</b><p>你的提醒已触发 · 收盘价 4126.58</p></div>
+        <div class="time">15:00</div>
+      </div>
+      <div class="alert-item">
+        <span class="alert-dot blue"></span>
+        <div class="t"><b>易方达蓝筹 昨日 +1.82%</b><p>单日收益 +¥ 86.24</p></div>
+        <div class="time">昨日</div>
+      </div>
+      <div class="alert-item">
+        <span class="alert-dot red"></span>
+        <div class="t"><b>中欧医疗 连跌 3 天</b><p>累计 -2.14%，你设置的提醒已触发</p></div>
+        <div class="time">昨日</div>
+      </div>
+      <div class="alert-item">
+        <span class="alert-dot blue"></span>
+        <div class="t"><b>你的关注基金经理变动</b><p>张坤 增聘 1 只新基金</p></div>
+        <div class="time">2天前</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 第二行：重要消息 + 值得关注 -->
+  <div class="grid grid-2">
+    <!-- 重要消息 -->
+    <div class="card">
+      <div class="card-title">重要消息 <span class="hint">你的关注区域</span> <a class="card-more" href="#">消息中心 →</a></div>
+
+      <div class="msg-item">
+        <div class="msg-tags"><span class="tag tag-green">利好</span><span class="tag tag-blue">政策</span></div>
+        <div class="t">证监会发布公募基金费率改革新规，管理费上限下调</div>
+        <div class="m">影响：你持有的 4 只主动基金 · 直接降低持有成本</div>
+        <div class="foot">来源：证监会官网 · 08-28 20:15 · 已有 12 家媒体转载</div>
+      </div>
+
+      <div class="msg-item">
+        <div class="msg-tags"><span class="tag tag-orange">待观察</span><span class="tag tag-blue">经理变动</span></div>
+        <div class="t">易方达蓝筹基金经理张坤增聘新基金，或分散管理精力</div>
+        <div class="m">影响：你的持仓 · 建议关注后续业绩变化</div>
+        <div class="foot">来源：基金公司公告 · 08-28 18:30</div>
+      </div>
+
+      <div class="msg-item">
+        <div class="msg-tags"><span class="tag tag-green">利好</span><span class="tag tag-blue">财报</span></div>
+        <div class="t">贵州茅台发布中报：营收同比 +18%，超市场预期</div>
+        <div class="m">影响：白酒板块 · 你关注的中证白酒指数</div>
+        <div class="foot">来源：上交所公告 · 08-28 21:00</div>
+      </div>
+
+      <div class="msg-item">
+        <div class="msg-tags"><span class="tag tag-red">利空</span><span class="tag tag-blue">行业</span></div>
+        <div class="t">医药集采范围扩大，创新药板块承压</div>
+        <div class="m">影响：你持有的中欧医疗健康混合A</div>
+        <div class="foot">来源：国家医保局 · 08-27 16:40</div>
+      </div>
+    </div>
+
+    <!-- 值得关注 -->
+    <div class="card">
+      <div class="card-title">值得关注 <a class="card-more" href="#">去发现 →</a></div>
+
+      <div class="interest-item">
+        <div class="t"><b>中证白酒 估值偏低</b><p>估值百分位 25%，近 1 年跑赢大盘 8%</p></div>
+        <span class="tag tag-green">研究说明</span>
+      </div>
+      <div class="interest-item">
+        <div class="t"><b>沪深300 风险适中</b><p>整体波动下降，估值百分位 67%，不算贵</p></div>
+        <span class="tag tag-blue">风险提示</span>
+      </div>
+      <div class="interest-item">
+        <div class="t"><b>你的持仓集中度偏高</b><p>医药相关占比 42%，单一赛道风险较大</p></div>
+        <span class="tag tag-orange">注意</span>
+      </div>
+      <div class="interest-item">
+        <div class="t"><b>红利低波 值得研究</b><p>近 3 年回撤小，股息率 5.2%</p></div>
+        <span class="tag tag-green">发现</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。右上角「🎨 外观」切换浅色/深色与主题色；「⏱ 时段」模拟交易时段 —— 时段感知与<b>响应式布局</b>均已确认采用（2026-08-29）。试试拉伸窗口宽度看布局变化。</div>
+</main>
+
+<script src="nav.js"></script>
+<script src="theme.js"></script>
+<script src="market.js"></script>
+
+</body>
+</html>
