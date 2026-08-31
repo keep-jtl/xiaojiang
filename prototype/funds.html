@@ -61,6 +61,23 @@
   .btn-clear { border: 1px solid var(--card-border); background: none; color: var(--ink-3); font-size: 11px; padding: 1px 8px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
   .btn-clear:hover { border-color: var(--tag-red-ink); color: var(--tag-red-ink); }
   .fund-name { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+  .card-btns { display: flex; gap: 6px; flex-shrink: 0; }
+  .btn-mini { border: 1px solid var(--card-border); background: none; color: var(--ink-2); font-size: 11px; padding: 1px 8px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
+  .btn-mini:hover { border-color: var(--brand); color: var(--brand); }
+  .btn-mini.danger:hover { border-color: var(--tag-red-ink); color: var(--tag-red-ink); }
+
+  /* 持仓标记：重仓（品牌色）/ 普通（灰蓝）/ 仅关注（浅灰虚线），点击可切换 */
+  .tag-heavy { background: var(--brand-soft); color: var(--brand); cursor: pointer; }
+  .tag-watch { background: var(--bg-soft); color: var(--ink-3); cursor: pointer; border: 1px dashed var(--card-border); }
+  .fund-meta .tag { cursor: pointer; }
+
+  /* 记录与复盘文本域 */
+  .rec-in { width: 100%; border: 1px solid var(--card-border); background: var(--bg); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--ink); resize: vertical; min-height: 62px; line-height: 1.6; box-sizing: border-box; font-family: inherit; }
+  .rec-in:focus { outline: none; border-color: var(--brand); }
+  .rec-view { font-size: 13px; color: var(--ink-2); line-height: 1.9; background: var(--bg-soft); border-radius: 8px; padding: 10px 12px; }
+  .rec-view b { color: var(--ink); font-weight: 600; }
+  .hist-item { cursor: pointer; }
+  .hist-item:hover { background: var(--bg-soft); }
 </style>
 </head>
 <body>
@@ -126,7 +143,7 @@
   <!-- 基金卡片（由脚本渲染） -->
   <div id="fundList"></div>
 
-  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。本页已可完整操作：<b>＋添加基金</b>（示例基金库搜索→选基金→填本金/份额→加入列表）、<b>点基金卡片看详情</b>（净值/持有/历史表现/风险/经理，均为示例）、<b>卡片上「清仓」</b>（二次确认→移入历史持仓）、<b>历史持仓</b>查看已清仓基金。「🔄 重置基金演示」可清空本次演示改动。真实基金数据、净值与收益计算等正式 App 阶段实现。</div>
+  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。本页已可完整操作：<b>＋添加基金</b>（示例基金库搜索→选基金→填本金/份额→加入列表）、<b>点基金卡片看详情</b>（净值/持有/历史表现/风险/经理，均为示例）、<b>「重仓/普通/仅关注」标记</b>（点击切换，作为消息筛选与提醒的关联基础）、<b>卡片上「📝 记录」</b>（买入理由/当时判断/观察重点/备注，仅自己可见）、<b>「清仓」</b>（填写复盘：为什么清仓/当时判断/哪里做得好/哪里值得复盘）、<b>历史持仓</b>（点击任意一条回看买入记录与清仓复盘）。「🔄 重置基金演示」可清空本次演示改动。真实基金数据、净值与收益计算等正式 App 阶段实现。</div>
 </main>
 
 <!-- 添加基金弹层 -->
@@ -156,12 +173,41 @@
   <div class="modal" id="detailBody"></div>
 </div>
 
-<!-- 清仓确认弹层 -->
+<!-- 持仓记录弹层（投资记忆：买入理由/当时判断/观察重点/备注，仅自己可见） -->
+<div class="modal-mask" id="recordModal">
+  <div class="modal">
+    <h3>📝 持仓记录</h3>
+    <div class="m-sub" id="recordSub"></div>
+    <div class="m-sec">买入理由</div>
+    <textarea class="rec-in" id="recBuy" placeholder="当初为什么买这只基金？"></textarea>
+    <div class="m-sec">当时的判断</div>
+    <textarea class="rec-in" id="recJudge" placeholder="当时你对市场 / 这只基金怎么看？"></textarea>
+    <div class="m-sec">准备重点观察什么</div>
+    <textarea class="rec-in" id="recWatch" placeholder="接下来想盯着哪些指标或事件？"></textarea>
+    <div class="m-sec">个人备注</div>
+    <textarea class="rec-in" id="recRemark" placeholder="其他想记下来的（仅自己可见）"></textarea>
+    <div class="m-foot">
+      <button class="btn btn-ghost btn-sm" id="recCancelBtn">取消</button>
+      <button class="btn btn-sm" id="recOkBtn">保存记录</button>
+    </div>
+  </div>
+</div>
+
+<!-- 清仓确认 + 复盘弹层 -->
 <div class="modal-mask" id="clearModal">
   <div class="modal">
     <h3>清仓确认</h3>
     <div class="m-sub" id="clearSub"></div>
-    <div class="freq-note" id="clearNote">确认后该基金会从当前持仓移除，并移入「历史持仓」，可随时查看最终盈亏。</div>
+    <div class="freq-note" id="clearResult" style="margin-bottom:4px;"></div>
+    <div class="m-sec">为什么清仓</div>
+    <textarea class="rec-in" id="clearReason" placeholder="是什么让你决定卖出？（可选）"></textarea>
+    <div class="m-sec">当时的判断</div>
+    <textarea class="rec-in" id="clearJudge" placeholder="卖出时你对这只基金 / 市场的看法？（可选）"></textarea>
+    <div class="m-sec">这次判断哪里做得好</div>
+    <textarea class="rec-in" id="clearGood" placeholder="例如：按计划止盈、及时止损……（可选）"></textarea>
+    <div class="m-sec">哪里值得以后复盘</div>
+    <textarea class="rec-in" id="clearReview" placeholder="例如：买入理由不够扎实、卖早了……（可选）"></textarea>
+    <div class="freq-note">这些记录仅自己可见，会随基金一起保留在「历史持仓」，方便以后复盘。最终收益会自动记录，不用填写。</div>
     <div class="m-foot">
       <button class="btn btn-ghost btn-sm" id="clearCancelBtn">取消</button>
       <button class="btn btn-sm" id="clearOkBtn">确认清仓</button>
@@ -173,12 +219,17 @@
 <div class="modal-mask" id="histModal">
   <div class="modal">
     <h3>历史持仓</h3>
-    <div class="m-sub">已清仓的基金都保留在这里，可随时查看最终盈亏（原型演示：示例数据）</div>
+    <div class="m-sub">已清仓的基金都保留在这里，可查看最终盈亏与当时的买入记录、清仓复盘（点击任意一条查看）</div>
     <div id="histList"></div>
     <div class="m-foot">
       <button class="btn btn-ghost btn-sm" id="histCloseBtn">关闭</button>
     </div>
   </div>
+</div>
+
+<!-- 历史持仓详情弹层（回看买入记录 + 清仓复盘） -->
+<div class="modal-mask" id="histDetailModal">
+  <div class="modal" id="histDetailBody"></div>
 </div>
 
 <script src="nav.js"></script>
@@ -207,17 +258,24 @@
     return FUND_LIB.filter(function (f) { return f.code === code; })[0];
   }
 
-  /* 初始持有（示例）+ 初始历史（示例）；改动存入 localStorage 便于刷新后保留 */
+  /* 初始持有（示例）+ 初始历史（示例）；改动存入 localStorage 便于刷新后保留。
+     tag: heavy=重仓 / normal=普通 / watch=仅关注（消息筛选与提醒的关联基础）
+     note: 持仓记录（买入理由/当时判断/观察重点/备注，仅自己可见）
+     clear: 清仓复盘（为什么清仓/当时判断/做得好/值得复盘） */
   var DEFAULTS = [
-    { code: '005827', cost: 43000, shares: 23924, from: '2025-01' },
-    { code: '003095', cost: 30000, shares: 17382, from: '2024-11' },
-    { code: '161725', cost: 12000, shares: 18980, from: '2025-06' },
-    { code: '000961', cost: 10000, shares: 7590, from: '2025-03' },
-    { code: '006327', cost: 10000, shares: 9784, from: '2025-08' }
+    { code: '005827', cost: 43000, shares: 23924, from: '2025-01', tag: 'heavy',
+      note: { buy: '看好白酒龙头和港股互联网龙头的长期竞争力，张坤历史业绩稳定。', judge: '当时估值不算便宜，但相信优质公司能消化高估值，计划拿三年以上。', watch: '重点观察：白酒行业景气度、腾讯业绩、回撤超过 20% 时的反应。', remark: '这笔是组合里最大的一笔，跌的时候别慌，按计划拿住。' } },
+    { code: '003095', cost: 30000, shares: 17382, from: '2024-11', tag: 'normal' },
+    { code: '161725', cost: 12000, shares: 18980, from: '2025-06', tag: 'normal' },
+    { code: '000961', cost: 10000, shares: 7590, from: '2025-03', tag: 'normal' },
+    { code: '006327', cost: 10000, shares: 9784, from: '2025-08', tag: 'watch' }
   ];
   var SEED_HISTORY = [
-    { name: '易方达消费行业股票', from: '2025-03', to: '2026-01', cost: 20000, sell: 21600 },
-    { name: '招商中证白酒指数A', from: '2025-06', to: '2026-02', cost: 12000, sell: 13080 }
+    { name: '易方达消费行业股票', from: '2025-03', to: '2026-01', cost: 20000, sell: 21600,
+      note: { buy: '看好消费复苏，买一只消费主动基做底仓。', judge: '消费估值在历史低位，认为跌不动了。', watch: '关注社零数据和白酒批价。', remark: '' },
+      clear: { reason: '持有大半年收益平平，消费数据一直没起色，想腾出资金。', judge: '当时判断消费还要磨底，先出来观察。', good: '及时止损没有死扛，避免了后续继续下跌。', review: '买入理由不够扎实，只看便宜没看基本面拐点，下次要多想一步。' } },
+    { name: '招商中证白酒指数A', from: '2025-06', to: '2026-02', cost: 12000, sell: 13080,
+      clear: { reason: '达到自己设定的止盈线 +9%。', judge: '白酒反弹到位置了，落袋为安。', good: '执行了计划，没贪。', review: '卖早了，后来继续涨了，但按纪律卖没错。' } }
   ];
   function loadJSON (key, def) {
     try { var v = JSON.parse(localStorage.getItem(key)); return v || def; } catch (e) { return def; }
@@ -252,6 +310,8 @@
   }
 
   /* ---------- 渲染持有列表 ---------- */
+  var tagMap = { heavy: ['tag-heavy', '重仓'], normal: ['tag-blue', '普通'], watch: ['tag-watch', '仅关注'] };
+
   function cardHTML (h) {
     var f = lib(h.code);
     var m = mv(h), p = profit(h), pct = p / h.cost * 100;
@@ -259,10 +319,13 @@
     var meta = '<span class="tag tag-blue">' + f.type + '</span>' +
       (f.manager ? '<span class="tag tag-green">' + f.manager + '</span>' : '') +
       (f.track ? '<br>跟踪：' + f.track : '');
+    var tg = tagMap[h.tag] || tagMap.normal;
     return '<div class="fund-card" data-code="' + f.code + '">' +
       '<div class="fund-name"><div><b>' + f.name + '</b><small>' + f.code + ' · 持有</small></div>' +
-      '<button class="btn-clear" data-code="' + f.code + '">清仓</button></div>' +
-      '<div class="fund-meta">' + meta + '</div>' +
+      '<div class="card-btns">' +
+      '<button class="btn-mini" data-act="record" data-code="' + f.code + '">📝 记录</button>' +
+      '<button class="btn-mini danger" data-act="clear" data-code="' + f.code + '">清仓</button></div></div>' +
+      '<div class="fund-meta"><span class="tag ' + tg[0] + '" data-act="tag" data-code="' + f.code + '" title="点击切换：重仓 / 普通 / 仅关注">' + tg[1] + '</span>' + meta + '</div>' +
       '<div class="fund-cell" style="text-align:right;"><b class="num">' + f.nav.toFixed(4) + '</b><span>08-28</span></div>' +
       '<div class="fund-cell" style="text-align:right;"><b class="num ' + (f.day >= 0 ? 'up' : 'down') + '">' + sign(f.day) + f.day.toFixed(2) + '%</b></div>' +
       '<div class="fund-cell" style="text-align:right;"><b class="num">¥ ' + fmt(m) + '</b><span>份额 ' + fmt(h.shares) + '</span></div>' +
@@ -406,7 +469,7 @@
     });
   }
 
-  /* ---------- 清仓 ---------- */
+  /* ---------- 清仓 + 复盘 ---------- */
   var clearingCode = null;
 
   function openClear (code) {
@@ -415,8 +478,12 @@
     var h = holdings.filter(function (x) { return x.code === code; })[0];
     var m = mv(h), p = profit(h), pct = p / h.cost * 100;
     document.getElementById('clearSub').textContent =
-      f.name + '（' + f.code + '）· 按最新净值估算卖出金额 ¥ ' + fmt(m) +
-      ' · 预计最终收益 ' + sign(p) + fmt(p) + '（' + sign(p) + pct.toFixed(1) + '%）';
+      f.name + '（' + f.code + '）· 按最新净值估算卖出金额 ¥ ' + fmt(m);
+    document.getElementById('clearResult').textContent =
+      '最终收益（自动记录）：' + sign(p) + fmt(p) + '（' + sign(p) + pct.toFixed(1) + '%）';
+    ['clearReason', 'clearJudge', 'clearGood', 'clearReview'].forEach(function (id) {
+      document.getElementById(id).value = '';
+    });
     document.getElementById('clearModal').classList.add('open');
   }
 
@@ -425,26 +492,114 @@
     if (!h) return;
     var f = lib(clearingCode);
     holdings = holdings.filter(function (x) { return x.code !== clearingCode; });
-    history.push({ name: f.name, from: h.from, to: todayYM(), cost: h.cost, sell: mv(h) });
+    history.push({
+      name: f.name, from: h.from, to: todayYM(), cost: h.cost, sell: mv(h),
+      note: h.note, /* 买入记录随基金一起保留 */
+      clear: {
+        reason: document.getElementById('clearReason').value.trim(),
+        judge: document.getElementById('clearJudge').value.trim(),
+        good: document.getElementById('clearGood').value.trim(),
+        review: document.getElementById('clearReview').value.trim()
+      }
+    });
     saveState();
     renderList();
     document.getElementById('clearModal').classList.remove('open');
-    fundNote('已清仓 ' + f.name + '，已移入「历史持仓」（示例数据）');
+    fundNote('已清仓 ' + f.name + '，复盘记录已保存到「历史持仓」（示例数据）');
   });
 
-  /* ---------- 历史持仓 ---------- */
+  /* ---------- 持仓记录（投资记忆：买入理由 / 当时判断 / 观察重点 / 备注） ---------- */
+  var recordCode = null;
+
+  function openRecord (code) {
+    recordCode = code;
+    var f = lib(code);
+    var h = holdings.filter(function (x) { return x.code === code; })[0];
+    var n = h.note || {};
+    document.getElementById('recordSub').textContent = f.name + '（' + f.code + '）· 仅自己可见';
+    document.getElementById('recBuy').value = n.buy || '';
+    document.getElementById('recJudge').value = n.judge || '';
+    document.getElementById('recWatch').value = n.watch || '';
+    document.getElementById('recRemark').value = n.remark || '';
+    document.getElementById('recordModal').classList.add('open');
+  }
+
+  function saveRecord () {
+    var h = holdings.filter(function (x) { return x.code === recordCode; })[0];
+    if (!h) return;
+    h.note = {
+      buy: document.getElementById('recBuy').value.trim(),
+      judge: document.getElementById('recJudge').value.trim(),
+      watch: document.getElementById('recWatch').value.trim(),
+      remark: document.getElementById('recRemark').value.trim()
+    };
+    saveState();
+    document.getElementById('recordModal').classList.remove('open');
+    fundNote('持仓记录已保存（仅自己可见）');
+  }
+
+  document.getElementById('recCancelBtn').addEventListener('click', function () { document.getElementById('recordModal').classList.remove('open'); });
+  document.getElementById('recOkBtn').addEventListener('click', saveRecord);
+
+  /* ---------- 持仓标记：重仓 / 普通 / 仅关注（点击循环切换） ---------- */
+  var TAG_CYCLE = ['heavy', 'normal', 'watch'];
+  var TAG_LABEL = { heavy: '重仓', normal: '普通', watch: '仅关注' };
+
+  function cycleTag (code) {
+    var h = holdings.filter(function (x) { return x.code === code; })[0];
+    if (!h) return;
+    var i = TAG_CYCLE.indexOf(h.tag);
+    if (i === -1) i = 1;
+    h.tag = TAG_CYCLE[(i + 1) % TAG_CYCLE.length];
+    saveState();
+    renderList();
+    fundNote(lib(code).name + ' 已标记为「' + TAG_LABEL[h.tag] + '」——作为消息筛选、财报分析与提醒的关联基础');
+  }
+
+  /* ---------- 历史持仓（点击回看买入记录 + 清仓复盘） ---------- */
+  function textOr (v) {
+    return v ? v : '<span style="color:var(--ink-3);">未填写</span>';
+  }
+
+  function openHistDetail (x) {
+    var p = x.sell - x.cost, pct = p / x.cost * 100;
+    var upP = p >= 0 ? 'up' : 'down';
+    var n = x.note || {}, c = x.clear || {};
+    document.getElementById('histDetailBody').innerHTML =
+      '<h3>' + x.name + '</h3>' +
+      '<div class="m-sub">' + x.from + ' ~ ' + x.to + ' · 买入 ¥ ' + fmt(x.cost) + ' · 卖出 ¥ ' + fmt(x.sell) +
+      ' · 最终收益 <span class="' + upP + '">' + sign(p) + fmt(p) + '（' + sign(p) + pct.toFixed(1) + '%）</span></div>' +
+      '<div class="m-sec">当时的买入记录</div>' +
+      '<div class="rec-view"><b>买入理由：</b>' + textOr(n.buy) + '<br>' +
+      '<b>当时判断：</b>' + textOr(n.judge) + '<br>' +
+      '<b>观察重点：</b>' + textOr(n.watch) + '<br>' +
+      '<b>备注：</b>' + textOr(n.remark) + '</div>' +
+      '<div class="m-sec">清仓复盘</div>' +
+      '<div class="rec-view"><b>为什么清仓：</b>' + textOr(c.reason) + '<br>' +
+      '<b>当时判断：</b>' + textOr(c.judge) + '<br>' +
+      '<b>做得好的地方：</b>' + textOr(c.good) + '<br>' +
+      '<b>值得以后复盘：</b>' + textOr(c.review) + '</div>' +
+      '<div class="m-foot"><button class="btn btn-sm" id="histDetailCloseBtn">关闭</button></div>';
+    document.getElementById('histDetailModal').classList.add('open');
+    document.getElementById('histDetailCloseBtn').addEventListener('click', function () {
+      document.getElementById('histDetailModal').classList.remove('open');
+    });
+  }
+
   function renderHistory () {
     var box = document.getElementById('histList');
     if (!history.length) {
       box.innerHTML = '<div class="empty">暂无历史持仓</div>';
       return;
     }
-    box.innerHTML = history.map(function (x) {
+    box.innerHTML = history.map(function (x, i) {
       var p = x.sell - x.cost;
       var pct = p / x.cost * 100;
       var upP = p >= 0 ? 'up' : 'down';
-      return '<div class="hist-item">' +
-        '<div class="t"><b>' + x.name + '</b><small>持有时间 ' + x.from + ' ~ ' + x.to + '</small></div>' +
+      var hasRec = (x.note && (x.note.buy || x.note.judge)) || (x.clear && (x.clear.reason || x.clear.review));
+      return '<div class="hist-item" data-i="' + i + '">' +
+        '<div class="t"><b>' + x.name + '</b><small>持有时间 ' + x.from + ' ~ ' + x.to + '</small>' +
+        '<small style="color:' + (hasRec ? 'var(--tag-orange-ink)' : 'var(--ink-3)') + ';">' + (hasRec ? '有买入/复盘记录 · 点击回看' : '未记录 · 点击查看') + '</small></div>' +
         '<div class="v"><span>买入 ¥ ' + fmt(x.cost) + ' · 卖出 ¥ ' + fmt(x.sell) + '</span>' +
         '<b class="' + upP + '">' + sign(p) + fmt(p) + '（' + sign(p) + pct.toFixed(1) + '%）</b></div>' +
       '</div>';
@@ -456,10 +611,22 @@
     document.getElementById('histModal').classList.add('open');
   });
 
-  /* ---------- 卡片点击：详情 / 清仓（事件委托） ---------- */
+  document.getElementById('histList').addEventListener('click', function (e) {
+    var item = e.target.closest('.hist-item');
+    if (!item) return;
+    var x = history[parseInt(item.dataset.i, 10)];
+    if (x) openHistDetail(x);
+  });
+
+  /* ---------- 卡片点击：记录 / 清仓 / 标记切换 / 详情（事件委托） ---------- */
   document.getElementById('fundList').addEventListener('click', function (e) {
-    var clearBtn = e.target.closest('.btn-clear');
-    if (clearBtn) { openClear(clearBtn.dataset.code); return; }
+    var act = e.target.closest('[data-act]');
+    if (act) {
+      var code = act.dataset.code;
+      if (act.dataset.act === 'clear') { openClear(code); return; }
+      if (act.dataset.act === 'record') { openRecord(code); return; }
+      if (act.dataset.act === 'tag') { cycleTag(code); return; }
+    }
     var card = e.target.closest('.fund-card');
     if (card) openDetail(card.dataset.code);
   });
@@ -468,7 +635,7 @@
   document.getElementById('addCancelBtn').addEventListener('click', function () { document.getElementById('addModal').classList.remove('open'); });
   document.getElementById('clearCancelBtn').addEventListener('click', function () { document.getElementById('clearModal').classList.remove('open'); });
   document.getElementById('histCloseBtn').addEventListener('click', function () { document.getElementById('histModal').classList.remove('open'); });
-  ['addModal', 'detailModal', 'clearModal', 'histModal'].forEach(function (id) {
+  ['addModal', 'detailModal', 'recordModal', 'clearModal', 'histModal', 'histDetailModal'].forEach(function (id) {
     document.getElementById(id).addEventListener('click', function (e) {
       if (e.target === this) this.classList.remove('open');
     });

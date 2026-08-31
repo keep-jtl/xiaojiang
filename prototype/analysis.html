@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小财通 · 组合体检（界面原型）</title>
+<link rel="stylesheet" href="style.css">
+<script>
+  // 原型演示：恢复上次选择的外观模式与主题颜色（正式版在「设置 → 外观」中提供）
+  (function () {
+    if (localStorage.getItem('xltc-theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    var a = localStorage.getItem('xltc-accent');
+    if (a) document.documentElement.dataset.accent = a;
+  })();
+</script>
+<style>
+  /* ---------- 组合体检页专属样式（原型演示 · 2026-08-31 优化版） ---------- */
+
+  /* 统一卡片内间距：标题 / 结论 / 依据 / 提示之间的距离收紧且一致 */
+  .page .card { margin-bottom: 0; }
+  .page .card-title { margin-bottom: 10px; }
+  .page .m-sec { margin: 10px 0 6px; }
+
+  /* 顶部：小财通给你的组合总结（行式，不撑高） */
+  .checkup-hero { background: var(--card); border: 1px solid var(--card-border); border-left: 4px solid var(--tag-orange-ink); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; }
+  .ch-head { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); margin-bottom: 4px; flex-wrap: wrap; }
+  .ch-data { color: var(--ink-3); font-size: 12px; }
+  .ch-row { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--card-border); font-size: 13px; line-height: 1.7; color: var(--ink-2); }
+  .ch-row:last-child { border-bottom: none; }
+  .ch-row .ci { flex-shrink: 0; width: 20px; text-align: center; }
+  .ch-row b { color: var(--ink); font-weight: 600; }
+  .ch-row.warn { color: var(--tag-orange-ink); }
+  .ch-row.warn b { color: var(--tag-orange-ink); }
+  .ch-row.ok b { color: var(--tag-green-ink); }
+  .ch-row.look b { color: var(--brand); }
+  .ch-row.look { background: var(--brand-soft); border-radius: 8px; padding: 8px 10px; margin-top: 4px; border-bottom: none; }
+
+  /* 模块统一三段式：结论 → 依据 → 观察 */
+  .qa-q { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.7; margin-bottom: 8px; }
+  .qa-q .up { color: var(--up); }
+  .qa-q .down { color: var(--down); }
+  .qa-q .warn { color: var(--tag-orange-ink); }
+  .qa-note { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+  .observe { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--ink-2); background: var(--bg-soft); border-radius: 8px; padding: 7px 12px; margin-top: 10px; line-height: 1.7; }
+  .observe .o-ico { flex-shrink: 0; }
+  .observe b { color: var(--ink); font-weight: 600; }
+  .observe.warn { background: var(--tag-orange-bg); color: var(--tag-orange-ink); }
+  .observe.warn b { color: var(--tag-orange-ink); }
+
+  /* 占比条（持仓结构 / 行业暴露 / 影响最大）：名称、条、百分比严格对齐 */
+  .exp-row { display: grid; grid-template-columns: 148px 1fr 52px; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 12.5px; }
+  .exp-row .l { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .exp-row .l b { color: var(--ink); font-weight: 600; }
+  .exp-row .l small { color: var(--ink-3); font-size: 11px; }
+  .exp-bar { height: 10px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+  .exp-bar i { display: block; height: 100%; border-radius: 4px; background: var(--brand); opacity: .8; }
+  .exp-bar i.bad { background: var(--tag-red-ink); }
+  .exp-val { text-align: right; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* 风格重复：基金×风格标签 */
+  .style-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--card-border); font-size: 12.5px; }
+  .style-row:last-child { border-bottom: none; }
+  .style-row .sn { min-width: 150px; color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .style-row .tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .overlap { margin-top: 10px; }
+
+  /* 风险变化：发生了什么 → 影响你的什么 */
+  .risk-item { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--card-border); font-size: 12.5px; }
+  .risk-item:last-child { border-bottom: none; }
+  .risk-item .r-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tag-orange-ink); margin-top: 6px; flex-shrink: 0; }
+  .risk-item .r-body { color: var(--ink-2); line-height: 1.7; }
+  .risk-item .r-body b { color: var(--ink); font-weight: 600; }
+
+  /* 值得关注的问题（收尾） */
+  .focus-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--card-border); }
+  .focus-item:last-child { border-bottom: none; }
+  .focus-item .f-no { width: 20px; height: 20px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .focus-item .f-body { font-size: 13px; color: var(--ink-2); line-height: 1.75; }
+  .focus-item .f-body b { color: var(--ink); }
+  .focus-item .f-act { margin-top: 3px; font-size: 12px; color: var(--brand); }
+
+  /* 组合体检主布局（2026-08-31 第二版）：两列 Grid + 大卡通栏
+     行结构：行1 = ①|②（内容量接近）  行2 = ③ 通栏（内容最多，独占一行最舒展）
+             行3 = ④|⑤  行4 = ⑥ 通栏（收尾总结）
+     卡片自然高度、不强行等高；矮卡下方只留自然呼吸空间；
+     阅读顺序 ①→⑥ 从上到下完全单调，无交叉；
+     窄屏（≤900px）整页还原单列，按 ①→⑥ 顺序 */
+  #masonry {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "a b"
+      "c c"
+      "d e"
+      "f f";
+    gap: 16px;
+    align-items: start;
+  }
+  .m-1 { grid-area: a; } .m-2 { grid-area: b; } .m-3 { grid-area: c; }
+  .m-4 { grid-area: d; } .m-5 { grid-area: e; } .m-6 { grid-area: f; }
+  @media (max-width: 900px) {
+    #masonry { grid-template-columns: 1fr; grid-template-areas: "a" "b" "c" "d" "e" "f"; }
+  }
+
+  /* ③ 通栏下的 4 条重叠观察：一行 4 格（窄屏 2 列） */
+  .obs-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .obs-grid .observe { margin-top: 0; }
+  @media (max-width: 900px) { .obs-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ⑤ 半列下的 4 条风险变化：2×2 网格（窄屏单列竖排），内容不变 */
+  .risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .risk-grid .risk-item { border-bottom: none; padding: 9px 10px; background: var(--bg-soft); border-radius: 8px; }
+  .risk-grid .risk-item .r-dot { margin-top: 5px; }
+  @media (max-width: 900px) { .risk-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<!-- 顶部导航（nav.js 统一生成） -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo"><span class="logo-dot"></span><span class="logo-text">小财通</span></div>
+    <nav class="nav" id="mainNav"></nav>
+    <div class="topbar-right">
+      <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
+      <span>示例数据 · 非真实持仓</span>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">组合体检</div>
+  <div class="page-sub">你的组合整体怎么样、风险集中在哪里、该关注什么 · 研究说明，不构成投资建议</div>
+
+  <!-- 顶部：小财通给你的组合总结 -->
+  <div class="checkup-hero">
+    <div class="ch-head">
+      <span class="tag tag-orange">总体健康：中等</span>
+      <span class="ch-data">5 只基金 · 总资产约 ¥12.8 万 · 示例数据，非真实持仓</span>
+    </div>
+    <div class="ch-list">
+      <div class="ch-row"><span class="ci">❤</span><span><b>整体健康程度：</b>中等——组合有分散、也有底仓，但白酒一块集中了约三分之一，是目前最大的软肋。</span></div>
+      <div class="ch-row warn"><span class="ci">⚠</span><span><b>最大的问题 1：</b>你的白酒相关仓位约 32%，接近三分之一——如果白酒行业整体下跌，你的组合会明显跟着跌。</span></div>
+      <div class="ch-row warn"><span class="ci">⚠</span><span><b>最大的问题 2：</b>易方达蓝筹和招商白酒在押注同一个行业（白酒），等于同一方向买了两份。</span></div>
+      <div class="ch-row ok"><span class="ci">✓</span><span><b>一个正面地方：</b>组合覆盖 A股、港股、美股三个市场；医疗基金与白酒基本不重叠，是独立的分散来源。</span></div>
+      <div class="ch-row look"><span class="ci">👀</span><span><b>接下来最应该观察：</b>腾讯财报（8 月中旬）——它是你两只基金（合计约 54%）的共同重仓股；以及白酒行业的估值位置。</span></div>
+    </div>
+  </div>
+
+  <div id="masonry">
+
+      <!-- ① 持仓结构 -->
+      <div class="card m-1">
+        <div class="card-title">① 我的持仓结构 <span class="hint">钱是怎么分配的</span></div>
+        <div class="qa-q">一只蓝筹就占了将近一半（45%）。它跌，你的组合就跟着跌；它涨，组合也主要靠它。</div>
+        <div id="structBox"></div>
+        <div class="observe"><span class="o-ico">👀</span><span><b>接下来观察：</b>单只基金超过 40% 属于集中度过高——不用急着动，但下次调仓时可以优先考虑要不要降低它。标为「重仓」的基金在消息筛选里优先级更高（「我的基金」里可调整）。</span></div>
+      </div>
+
+      <!-- ② 风险集中 -->
+      <div class="card m-2">
+        <div class="card-title">② 风险集中在哪里 <span class="hint">哪一块风险最大</span></div>
+        <div class="qa-q">最大的单一风险是<span class="warn">白酒</span>：你约三分之一的钱都和它相关，白酒整体下跌时，组合会明显跟着跌。</div>
+        <div class="m-sec">行业暴露（按基金重仓行业估算）</div>
+        <div id="sectorBox"></div>
+        <div class="qa-note">其余行业（金融、其他）分散在 6% 以下，没有其他明显集中点。</div>
+        <div class="observe warn"><span class="o-ico">⚠</span><span><b>接下来观察：</b>白酒行业估值已到历史 58% 分位（偏高），若继续上行，集中度风险会加大。相关动态到「消息」页看。</span></div>
+      </div>
+
+      <!-- ③ 风格重复 -->
+      <div class="card m-3">
+        <div class="card-title">③ 有没有基金风格重复 <span class="hint">同一方向买了几份</span></div>
+        <div class="qa-q">有两组重叠：<span class="warn">蓝筹 × 白酒指数</span>押注同一个行业（白酒），<span class="warn">蓝筹 × 海外50</span>都重仓港股互联网龙头。它们不是两条独立的"腿"。</div>
+        <div id="styleBox"></div>
+        <div class="obs-grid">
+          <div class="observe warn"><span class="o-ico">⚠</span><span><b>蓝筹 × 白酒指数：</b>一个主动、一个被动，重仓行业几乎相同。行情好赚双份，行情差也亏双份。</span></div>
+          <div class="observe warn"><span class="o-ico">⚠</span><span><b>蓝筹 × 海外50：</b>都重仓腾讯等港股互联网龙头，有一定重叠。</span></div>
+          <div class="observe"><span class="o-ico">✓</span><span><b>中欧医疗</b>与其余基金基本不重叠，是独立的分散来源。</span></div>
+          <div class="observe"><span class="o-ico">👀</span><span><b>接下来观察：</b>下次想加仓前先问自己——是不是又在买白酒？</span></div>
+        </div>
+      </div>
+
+      <!-- ④ 影响最大 -->
+      <div class="card m-4">
+        <div class="card-title">④ 哪些基金影响最大 <span class="hint">它跌了，你的组合动多少</span></div>
+        <div class="qa-q">最该盯的是<span class="warn">蓝筹</span>：它跌 10%，你的总资产约 <span class="down">-4.5%</span>；其次是医疗（约 -2.1%）。</div>
+        <div id="impactBox"></div>
+        <div class="qa-note">其余两只（沪深300、海外50）合计影响约 -2%，属于组合里的"稳定器"。</div>
+      </div>
+
+      <!-- ⑤ 近期重要风险变化 -->
+      <div class="card m-5">
+    <div class="card-title">⑤ 近期有什么重要风险变化 <span class="hint">与你的持仓相关 · 示例</span></div>
+    <div id="riskList" class="risk-grid"></div>
+  </div>
+
+      <!-- ⑥ 值得关注的问题 -->
+      <div class="card m-6" style="border-left:4px solid var(--brand);">
+    <div class="card-title">⑥ 现在最值得你关注的问题 <span class="hint">看完前面五项，给你收个尾</span></div>
+    <div id="focusBox"></div>
+    <div class="observe"><span class="o-ico">⚠️</span><span>以上都是研究说明，不是买卖建议。你的钱怎么安排，由你自己决定。</span></div>
+  </div>
+  </div>
+
+  <div class="demo-note">✓ 界面原型（<b>全部为示例数据与原型计算，非真实投资数据</b>）：示例持仓、行业暴露按示例基金的重仓行业推算、风险变化为演示内容。真实基金持仓、行业暴露、历史净值、基金相关性和风险数据，需要正式 App 接入真实数据源后才能准确计算。本页按 2026-08-31 确认的方向制作：问题导向的组合体检，单基金专业指标在「我的基金 → 基金详情」查看。<b>本页为演示稿</b>，确认前不记录为最终决策。</div>
+</main>
+
+<script src="nav.js"></script>
+<script src="theme.js"></script>
+<script>
+(function () {
+  /* ==========================================================
+     组合体检 · 原型演示（2026-08-31 优化版）
+     统一表达：先结论 → 关键依据 → 接下来观察什么
+     数字翻译成人话，只留帮助判断的关键数字
+     数据与「我的基金」页 5 只示例持仓一致，比例为真实计算
+     ========================================================== */
+
+  /* 持仓（与 funds.html 示例一致） */
+  var FUNDS = [
+    { name: '易方达蓝筹精选混合', code: '005827', tag: '重仓', pct: 45.4, style: '大盘成长', note: '白酒 + 港股龙头' },
+    { name: '中欧医疗健康混合A', code: '003095', tag: '普通', pct: 20.6, style: '行业主题', note: '医药' },
+    { name: '招商中证白酒指数A', code: '161725', tag: '普通', pct: 14.5, style: '行业主题', note: '白酒' },
+    { name: '天弘沪深300ETF联接A', code: '000961', tag: '普通', pct: 10.9, style: '宽基均衡', note: 'A股大盘' },
+    { name: '易方达中证海外50ETF联接A', code: '006327', tag: '仅关注', pct: 8.6, style: '行业主题', note: '港股互联网' }
+  ];
+
+  /* 行业暴露（按重仓行业推算，示例）——只显示真正的风险点，其余一句话带过 */
+  var SECTORS = [
+    ['白酒', 31.9, 'bad'],
+    ['医药', 18.5, ''],
+    ['港股互联网', 12.5, '']
+  ];
+
+  function bar (pct, cls) {
+    return '<span class="exp-bar"><i class="' + (cls || '') + '" style="width:' + Math.min(pct, 100) + '%;"></i></span>';
+  }
+
+  /* ---------- ① 持仓结构 ---------- */
+  document.getElementById('structBox').innerHTML = FUNDS.map(function (f) {
+    return '<div class="exp-row"><span class="l"><b>' + f.name + '</b> <small>' + f.tag + '</small></span>' +
+      bar(f.pct) + '<span class="exp-val">' + f.pct.toFixed(1) + '%</span></div>';
+  }).join('');
+
+  /* ---------- ② 风险集中 ---------- */
+  document.getElementById('sectorBox').innerHTML = SECTORS.map(function (s) {
+    return '<div class="exp-row"><span class="l">' + s[0] + '</span>' +
+      bar(s[1], s[2]) + '<span class="exp-val">' + s[1].toFixed(1) + '%</span></div>';
+  }).join('');
+
+  /* ---------- ③ 风格重复 ---------- */
+  document.getElementById('styleBox').innerHTML = FUNDS.map(function (f) {
+    return '<div class="style-row"><span class="sn">' + f.name + '</span>' +
+      '<span class="tags"><span class="tag tag-blue">' + f.style + '</span><span class="tag tag-blue">' + f.note + '</span></span></div>';
+  }).join('');
+
+  /* ---------- ④ 影响最大（只列前三 + 一句带过其余） ---------- */
+  document.getElementById('impactBox').innerHTML = FUNDS.slice(0, 3).map(function (f) {
+    return '<div class="exp-row"><span class="l"><b>' + f.name + '</b></span>' +
+      bar(f.pct, f.pct > 40 ? 'bad' : '') + '<span class="exp-val">跌10% → ' + (-f.pct / 10).toFixed(1) + '%</span></div>';
+  }).join('');
+
+  /* ---------- ⑤ 近期重要风险变化（示例：发生了什么 → 影响你的什么） ---------- */
+  document.getElementById('riskList').innerHTML =
+    '<div class="risk-item"><span class="r-dot"></span><span class="r-body"><b>招商中证白酒指数近 3 月回撤 -8.6%</b>，白酒行业估值升至历史 58% 分位（偏高区域）。<br>影响你的：白酒指数（14.5%）和蓝筹（45.4%）——你组合约 32% 直接相关。</span></div>' +
+    '<div class="risk-item"><span class="r-dot"></span><span class="r-body"><b>腾讯控股财报将于 8 月中旬发布</b>（蓝筹与海外50 的共同重仓股）。<br>影响你的：两只基金合计约 54% 的仓位；重点看营收增速和回购计划。</span></div>' +
+    '<div class="risk-item"><span class="r-dot"></span><span class="r-body"><b>中欧医疗近 6 月下跌 -6.5%</b>，跑输同类平均（-3.1%），医药政策面暂无新变化。<br>影响你的：医疗基金（20.6%）。</span></div>' +
+    '<div class="risk-item"><span class="r-dot"></span><span class="r-body"><b>沪深300 估值处于历史 45% 分位</b>，中性区间，暂无特殊信号。<br>影响你的：沪深300 联接（10.9%），作为底仓暂时没有明显风险。</span></div>';
+
+  /* ---------- ⑥ 值得关注的问题（收尾） ---------- */
+  document.getElementById('focusBox').innerHTML =
+    '<div class="focus-item"><span class="f-no">1</span><span class="f-body"><b>白酒占了组合约三分之一</b>——白酒行业若出现重大变化，你的组合会被明显带动。<br><span class="f-act">相关动作：到「消息」页关注白酒行业动态与财报</span></span></div>' +
+    '<div class="focus-item"><span class="f-no">2</span><span class="f-body"><b>蓝筹和白酒指数在押注同一个行业</b>——下次想加仓前，先想一想：是不是又在买白酒？把想法记进「持仓记录」，以后能复盘自己的决策过程。<br><span class="f-act">相关动作：在「我的基金」补充每只基金的买入理由</span></span></div>' +
+    '<div class="focus-item"><span class="f-no">3</span><span class="f-body"><b>腾讯财报</b>是你两只基金（合计约 54%）的共同重仓股，值得留意。<br><span class="f-act">相关动作：到时到「消息」页查看白话拆解</span></span></div>';
+
+}());
+</script>
+
+</body>
+</html>

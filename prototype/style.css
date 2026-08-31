@@ -216,6 +216,8 @@ html, body { overflow-x: hidden; } /* 兜底：任何宽度下不出现横向滚
 }
 .nav-more.open .nav-dropdown { display: block; }
 .nav-dropdown a { display: block; padding: 8px 12px; border-radius: 8px; white-space: nowrap; }
+.nav-dropdown .nav-grp { font-size: 11px; color: var(--ink-3); padding: 8px 12px 2px; }
+.nav-dropdown .nav-grp:first-child { padding-top: 6px; }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--ink-3); font-size: 13px; }
 
 /* 顶栏窄屏适配：优先保住导航，隐藏次要文字、压缩间距 */
