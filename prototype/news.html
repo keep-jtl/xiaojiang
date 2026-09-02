@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>小财通 · 消息（界面原型）</title>
+<title>小财通 · 市场事件（界面原型）</title>
 <link rel="stylesheet" href="style.css">
 <script>
   // 原型演示：恢复上次选择的外观模式与主题颜色（正式版在「设置 → 外观」中提供）
@@ -14,8 +14,8 @@
   })();
 </script>
 <style>
-  /* ---------- 消息页专属样式（原型演示） ---------- */
-  /* 布局：左消息列表 + 右侧栏；宽屏铺开，窄屏侧栏下移到列表下方 */
+  /* ---------- 市场事件页专属样式（原型演示） ---------- */
+  /* 布局：左事件列表 + 右侧栏；宽屏铺开，窄屏侧栏下移到列表下方 */
   .news-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: clamp(12px, 1.5vw, 20px); align-items: start; }
   @media (max-width: 1000px) {
     .news-grid { grid-template-columns: 1fr; }
@@ -53,14 +53,46 @@
   .nb-text b { font-weight: 600; color: var(--ink); font-size: 13px; }
   .nb-text span { display: block; color: var(--ink-3); font-size: 12px; }
 
-  /* 类型筛选（每个区域各有一组，独立记忆） */
+  /* 类型筛选（每个区域各有一组，独立记忆；作用于"今日其他事件/市场发现列表"，不筛选上方小结） */
   .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
   .f-chip { border: 1px solid var(--card-border); background: none; color: var(--ink-2); font-size: 12px; padding: 4px 12px; border-radius: 20px; cursor: pointer; white-space: nowrap; }
   .f-chip.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
 
-  /* 忽略反馈条 */
+  /* 忽略反馈条 / 空状态 */
   .inline-note { display: none; background: var(--note-bg); color: var(--note-ink); font-size: 12.5px; padding: 9px 14px; border-radius: 10px; margin-bottom: 10px; }
   .inline-note.show { display: block; }
+  .empty-hint { display: none; background: var(--bg-soft); color: var(--ink-3); font-size: 12.5px; padding: 14px; border-radius: 10px; margin-top: 4px; text-align: center; }
+  .empty-hint.show { display: block; }
+
+  /* ============ 今日小结（2026-09-02 市场事件页强化，核心"今天与你有关"） ============ */
+  .daily-card {
+    background: var(--card); border: 1px solid var(--card-border); border-top: 3px solid var(--brand);
+    border-radius: 14px; padding: 14px 16px 16px; margin-bottom: 14px;
+  }
+  .daily-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .daily-title { flex: 1; min-width: 260px; }
+  .daily-title h2 { font-size: 16.5px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .daily-title h2 .d-lbl { font-size: 11px; font-weight: 700; color: var(--brand); background: var(--brand-soft); border: 1px solid var(--brand); border-radius: 6px; padding: 1px 8px; letter-spacing: .5px; }
+  .daily-title p { font-size: 13px; color: var(--ink-2); margin: 5px 0 0; }
+  .daily-title p b { color: var(--brand); font-weight: 700; }
+
+  /* 漏斗：展示"筛"的过程（230 → 7 → 3），让用户理解为什么只看到几条 */
+  .funnel { display: grid; grid-template-columns: 1.4fr 1fr .8fr; gap: 6px; width: 100%; margin-top: 10px; }
+  .funnel .fseg { background: var(--bg-soft); border-radius: 9px; padding: 7px 12px; min-width: 0; }
+  .funnel .fseg b { font-size: 14.5px; font-weight: 700; display: block; line-height: 1.25; }
+  .funnel .fseg span { font-size: 11.5px; color: var(--ink-3); display: block; margin-top: 1px; }
+  .funnel .fseg.keep { background: var(--brand-soft); }
+  .funnel .fseg.keep b { color: var(--brand); }
+  @media (max-width: 700px) { .funnel { grid-template-columns: 1fr; } }
+
+  .daily-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .daily-list .msg-card { margin-bottom: 0; }
+
+  /* "今日其他相关事件"分组标题 */
+  .sub-head { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 10px; }
+  .sub-head b { font-size: 14px; font-weight: 600; }
+  .sub-head span { font-size: 12px; color: var(--ink-3); }
+  .sub-head .line { flex: 1; height: 1px; background: var(--line); }
 
   /* 消息卡片 */
   .msg-card {
@@ -75,6 +107,7 @@
   .tag-event { background: var(--tag-orange-bg); color: var(--tag-orange-ink); font-weight: 600; } /* 重大市场事件：橙黄 */
   .msg-sum { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
   .msg-why { font-size: 12.5px; color: var(--ink-2); background: var(--bg-soft); border-radius: 8px; padding: 6px 10px; margin-top: 6px; }
+  .msg-why b { color: var(--brand); font-weight: 600; }
   .msg-impact { margin-top: 8px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
   .i-label { font-size: 12px; color: var(--ink-3); }
   .msg-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--ink-3); }
@@ -87,17 +120,34 @@
   .lv-mid { background: var(--tag-blue-bg); color: var(--tag-blue-ink); }
   .lv-minor { background: var(--bg-soft); color: var(--ink-3); border: 1px solid var(--line); padding: 0 7px; }
 
-  /* 展开详情 */
+  /* 展开详情（六段拆解模板，2026-09-02 强化） */
   .msg-detail { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--card-border); font-size: 13px; color: var(--ink-2); }
   .msg-card.open .msg-detail { display: block; }
   .msg-card.flash { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); } /* 通知点击跳转后的高亮提示 */
-  .d-sec { font-size: 12px; font-weight: 600; color: var(--ink-3); margin: 8px 0 4px; }
+  .d-sec { font-size: 12px; font-weight: 600; color: var(--ink-3); margin: 10px 0 4px; }
   .d-sec:first-child { margin-top: 0; }
-  .d-impact { list-style: none; }
+  .d-sec .no { display: inline-block; min-width: 17px; height: 17px; line-height: 16px; text-align: center; font-size: 10.5px; font-weight: 700; border-radius: 4px; margin-right: 5px; }
+  .d-sec .no.b { background: var(--brand-soft); color: var(--brand); }
+  .msg-detail p { margin: 2px 0 0; }
+  .d-impact { list-style: none; margin: 0; }
   .d-impact li { padding: 3px 0 3px 16px; position: relative; }
   .d-impact li::before { content: '·'; position: absolute; left: 4px; color: var(--ink-3); }
+  .d-impact li b { font-weight: 600; color: var(--ink); }
+  .d-act { margin-top: 8px; font-size: 13px; }
+  .d-act b { color: var(--ink); }
+  .d-act.ok { background: var(--note-bg); color: var(--note-ink); border-radius: 8px; padding: 7px 11px; }
   .d-disclaimer { font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
   .d-ops { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+  /* 财报拆解：数据摘要格 */
+  .fin-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 2px; }
+  .fin-cell { background: var(--bg-soft); border-radius: 10px; padding: 8px 12px; min-width: 0; }
+  .fin-cell .k { font-size: 11.5px; color: var(--ink-3); }
+  .fin-cell .v { font-size: 16px; font-weight: 700; margin-top: 2px; line-height: 1.2; }
+  .fin-cell .v small { font-size: 11.5px; font-weight: 400; color: var(--ink-3); margin-left: 2px; }
+  .fin-cell .s { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+  .fin-tip { font-size: 11px; color: var(--ink-3); margin: 6px 0 0; }
+  @media (max-width: 560px) { .fin-strip { grid-template-columns: 1fr; } }
 
   /* 右侧栏：通知设置 / 统计 / 筛选说明 */
   .notif-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
@@ -109,7 +159,8 @@
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .stat-grid .s-item { background: var(--bg-soft); border-radius: 10px; padding: 10px 12px; }
   .stat-grid .s-item .v { font-size: 18px; font-weight: 700; }
-  .stat-grid .s-item .l { font-size: 11.5px; color: var(--ink-3); }
+  .stat-grid .s-item.hot .v { color: var(--brand); }
+  .stat-grid .s-item .l { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; line-height: 1.45; }
   .rule-list { list-style: none; }
   .rule-list li { font-size: 12.5px; color: var(--ink-2); padding: 5px 0 5px 18px; position: relative; border-bottom: 1px dashed var(--line); }
   .rule-list li:last-child { border-bottom: none; }
@@ -133,17 +184,17 @@
     <nav class="nav" id="mainNav"></nav>
     <div class="topbar-right">
       <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
-      <span>示例消息 · 非真实数据</span>
+      <span>示例事件 · 非真实数据</span>
     </div>
   </div>
 </header>
 
 <main class="page">
-  <div class="page-title">消息</div>
-  <div class="page-sub">自动收集 + 规则过滤 + 白话摘要 · 每条消息说清：发生了什么、为什么值得关注、可能影响什么</div>
+  <div class="page-title">市场事件</div>
+  <div class="page-sub">先过滤，只留与你有关的事 · 每条讲清：发生了什么、为什么与你有关、影响方向、接下来观察什么、要不要操作</div>
 
   <div class="news-grid">
-    <!-- ==================== 左：消息列表 ==================== -->
+    <!-- ==================== 左：事件列表 ==================== -->
     <div>
       <!-- 系统提示条（开机自启询问结果等） -->
       <div class="inline-note" id="sysNote"></div>
@@ -156,14 +207,196 @@
 
       <!-- ============ 区域一：我的关注 ============ -->
       <div class="msg-list" id="followZone">
+
+        <!-- ====== 今日小结（页面核心：今天真正和你有关的几件事） ====== -->
+        <div class="daily-card">
+          <div class="daily-head">
+            <div class="daily-title">
+              <h2><span class="d-lbl">今日小结</span>今天与你有关的，先看这 3 件就够了</h2>
+              <p>今天市场事件约 <b>230 条</b>，真正和你持仓、关注有关的只有 <b>7 条</b>，其中这 <b>3 件</b>最重要——先看这几件，剩下的在下方列表里。</p>
+            </div>
+          </div>
+          <!-- 漏斗：展示"筛"的过程，让用户明白为什么只看到几条 -->
+          <div class="funnel">
+            <div class="fseg"><b>约 230 条</b><span>白名单来源的全部市场事件</span></div>
+            <div class="fseg keep"><b>7 条与你有关</b><span>滤掉了 223 条无关事件</span></div>
+            <div class="fseg keep"><b>3 件最重要</b><span>已按重要度排序 · 先看小结</span></div>
+          </div>
+
+          <div class="daily-list">
+
+            <!-- 小结条目 1：重大市场事件（央行降准） -->
+            <article class="msg-card event unread" data-cat="event">
+              <div class="msg-head">
+                <span class="msg-dot"></span>
+                <span class="tag tag-event">⚠️ 重大市场事件</span>
+                <span class="tag tag-green">利好</span>
+                <span class="lv lv-major">重大</span>
+                <h3 class="msg-title">央行下调存款准备金率 0.25 个百分点，释放约 8000 亿元长期资金</h3>
+              </div>
+              <p class="msg-sum">白话：央行今天宣布"降准"——银行必须上交给央行的钱变少了，等于向市场放出约 8000 亿元的长期资金。</p>
+              <p class="msg-why"><b>🎯 为什么与你有关</b>：你的 5 笔持仓里有 4 笔跟着 A 股整体走（沪深300、蓝筹、白酒、医疗），市场资金变宽裕，从历史经验看对整体情绪偏正面——这是少见的、和你几乎全部持仓都有关的事件。</p>
+              <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">天弘沪深300ETF联接A</span><span class="tag tag-blue">易方达蓝筹精选混合</span><span class="tag tag-blue">招商中证白酒指数A</span><span class="tag tag-blue">中欧医疗健康混合A</span></div>
+              <div class="msg-foot">
+                <span>中国人民银行官网</span><span>·</span><span>今日 09:12</span><span>·</span><span>另有 23 家报道</span>
+                <span class="foot-right">
+                  <button class="icon-btn fav" title="收藏">☆</button>
+                  <button class="icon-btn del" title="忽略">✕</button>
+                </span>
+              </div>
+              <div class="msg-detail">
+                <div class="d-sec"><span class="no b">1</span>发生了什么</div>
+                <p>中国人民银行今天宣布下调金融机构存款准备金率 0.25 个百分点，预计释放长期资金约 8000 亿元。这是今年第二次降准，目的是让银行手里的钱更宽裕，企业和个人贷款更容易，保持市场流动性合理充裕。</p>
+                <div class="d-sec"><span class="no b">2</span>为什么与你有关</div>
+                <p>你持有的天弘沪深300、易方达蓝筹精选、白酒、医疗基金，买的基本都是 A 股公司。市场上钱变多了，从历史经验看对股市整体情绪偏正面，等于间接影响你每一笔持仓。</p>
+                <div class="d-sec"><span class="no b">3</span>可能影响你的哪些持仓</div>
+                <ul class="d-impact">
+                  <li><b>天弘沪深300ETF联接A、易方达蓝筹精选混合、招商中证白酒指数A、中欧医疗健康混合A</b> → 都是间接影响：基金本身没变，变的是整个市场的资金环境</li>
+                  <li>易方达中证海外50ETF联接A → 基本无关（买的是港股互联网公司）</li>
+                </ul>
+                <div class="d-sec"><span class="no b">4</span>影响方向</div>
+                <p><span class="tag tag-green">偏正面</span> 流动性更宽松，历史上对市场情绪偏正面。但要说清楚：<b>降准不等于马上涨</b>，过去几次降准后市场有涨有跌，别把它当成"要涨了"的信号。</p>
+                <div class="d-sec"><span class="no b">5</span>接下来最值得观察什么</div>
+                <ul class="d-impact">
+                  <li>未来几天市场成交量有没有明显放大（有量说明资金真的进场了）</li>
+                  <li>有没有后续配套政策（例如降息）。这些不需要你天天盯盘，有重要变化小财通会提醒你</li>
+                </ul>
+                <div class="d-sec"><span class="no b">6</span>需要立即操作吗</div>
+                <p class="d-act ok"><b>不需要。</b>这是整体环境的偏正面事件，不针对你的任何一只基金。不要因为一条事件就临时加仓或卖出，按你自己的计划来就好。</p>
+                <div class="d-sec">来源与质量</div>
+                <p>首发来源：中国人民银行官网 · 今日 09:12 · 重要度：重大 · 另有 23 家媒体报道同一事件，已自动合并（保留首发来源）</p>
+                <div class="d-ops">
+                  <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                  <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+                </div>
+                <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+              </div>
+            </article>
+
+            <!-- 小结条目 2：财报拆解（贵州茅台半年报——重仓公司财报，专项拆解） -->
+            <article class="msg-card unread" data-cat="report">
+              <div class="msg-head">
+                <span class="msg-dot"></span>
+                <span class="tag tag-blue">📊 财报拆解</span>
+                <span class="tag tag-green">利好</span>
+                <span class="lv lv-major">重大</span>
+                <h3 class="msg-title">贵州茅台发布半年报：营收、净利润同比均增长约 15%</h3>
+              </div>
+              <p class="msg-sum">白话：你持有的基金里最重要的一家公司——贵州茅台，公布了上半年成绩单：收入和利润都比去年同期增长约 15%，和市场预期基本一致。</p>
+              <p class="msg-why"><b>🎯 为什么与你有关</b>：招商中证白酒指数A 的第一大重仓股就是贵州茅台，易方达蓝筹精选也重仓白酒龙头。这家公司业绩稳不稳，直接关系你两笔持仓的基本面。</p>
+              <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">贵州茅台（重仓公司）</span><span class="tag tag-blue">白酒赛道</span><span class="tag tag-blue">招商中证白酒指数A</span><span class="tag tag-blue">易方达蓝筹精选混合</span></div>
+              <div class="msg-foot">
+                <span>上交所公告（巨潮资讯网）</span><span>·</span><span>09-01 19:05</span><span>·</span><span>另有 8 家报道</span>
+                <span class="foot-right">
+                  <button class="icon-btn fav" title="收藏">☆</button>
+                  <button class="icon-btn del" title="忽略">✕</button>
+                </span>
+              </div>
+              <div class="msg-detail">
+                <!-- 财报拆解：先用数字说话，再逐条解释 -->
+                <div class="fin-strip">
+                  <div class="fin-cell"><div class="k">营业收入（上半年）</div><div class="v">约 952 亿<small>+15.4%</small></div><div class="s">去年同期约 825 亿</div></div>
+                  <div class="fin-cell"><div class="k">归母净利润（上半年）</div><div class="v">约 466 亿<small>+15.1%</small></div><div class="s">去年同期约 405 亿</div></div>
+                  <div class="fin-cell"><div class="k">和市场预期比</div><div class="v">基本一致</div><div class="s">没有惊喜也没有惊吓</div></div>
+                </div>
+                <p class="fin-tip">↑ 上方数字为虚构示例数据，仅用于演示拆解方式，不代表真实财报。</p>
+                <div class="d-sec"><span class="no b">1</span>营收发生了什么变化</div>
+                <p>上半年营业收入约 952 亿元，比去年同期多卖了约 15%。"同比"就是和去年同期比——同样的半年，茅台还在稳步增长，没有掉队。</p>
+                <div class="d-sec"><span class="no b">2</span>利润发生了什么变化</div>
+                <p>归母净利润约 466 亿元，同比增长约 15%。收入和利润同步增长，说明赚钱能力没有下滑，成本控制也稳。</p>
+                <div class="d-sec"><span class="no b">3</span>增长情况怎么样</div>
+                <p>增速和去年差不多：没有加速，也没有减速，和市场预期基本一致——属于"平稳交卷"。同时公司提到直销渠道占比继续提升，意思是茅台越来越多地直接把酒卖给消费者（而不是靠经销商），渠道更健康。</p>
+                <div class="d-sec"><span class="no b">4</span>管理层说了什么</div>
+                <p>管理层在报告里提到：白酒行业整体进入"调整期"，动销（实际卖出去的酒）偏慢、批价有波动；茅台靠品牌力和直销渠道，仍然保持增长，但公司也不再追求高增速，而是"稳"字当头。</p>
+                <div class="d-sec"><span class="no b">5</span>哪些地方值得注意</div>
+                <ul class="d-impact">
+                  <li>增速没有加快：说明白酒整体环境一般，茅台也只是"稳"，不是"火"</li>
+                  <li>直销占比提升：渠道结构在变，经销商环节的利润在向公司转移，长期影响值得留意</li>
+                  <li>最重要的一点：<b>业绩稳 ≠ 股价涨</b>。业绩是公司的"里子"，股价还受市场情绪影响，白酒赛道近期整体偏弱，单份财报不改变大环境</li>
+                </ul>
+                <div class="d-sec"><span class="no b">6</span>为什么可能影响我的基金</div>
+                <p>招商中证白酒指数A 的前十大重仓里，贵州茅台是第一大重仓（示例占比约 14%）；易方达蓝筹精选同样重仓白酒龙头。茅台业绩平稳，说明你这两笔持仓里最大的"基本面支柱"没有出问题——对白酒赛道是偏正面的"定心丸"，但白酒行业整体承压的局面没有改变。</p>
+                <div class="d-sec"><span class="no b">7</span>接下来最值得观察什么</div>
+                <ul class="d-impact">
+                  <li>下半年白酒"批价"（经销商之间的成交价）和动销数据——这是判断行业有没有回暖的最直接信号</li>
+                  <li>其他白酒公司（五粮液、泸州老窖等）的中报——如果大家都不好，是行业问题；如果只有个别公司不好，才是它自己的问题</li>
+                </ul>
+                <div class="d-sec"><span class="no b">8</span>需要立即操作吗</div>
+                <p class="d-act ok"><b>不需要。</b>业绩平稳不等于需要你做任何操作。如果后续行业数据明显变差，小财通会用消息和提醒告诉你，到时再判断也不迟。</p>
+                <div class="d-sec">来源与质量</div>
+                <p>首发来源：上交所公告（巨潮资讯网）· 09-01 19:05 · 重要度：重大 · 另有 8 家媒体报道同一事件，已自动合并</p>
+                <div class="d-ops">
+                  <a class="btn btn-ghost btn-sm" href="#">查看财报原文 ↗（示例）</a>
+                  <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+                </div>
+                <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+              </div>
+            </article>
+
+            <!-- 小结条目 3：经理变动（中欧医疗健康混合A 增聘） -->
+            <article class="msg-card unread" data-cat="manager" id="msgManager">
+              <div class="msg-head">
+                <span class="msg-dot"></span>
+                <span class="tag tag-blue">👔 经理变动</span>
+                <span class="tag tag-orange">待观察</span>
+                <span class="lv lv-major">重大</span>
+                <h3 class="msg-title">中欧医疗健康混合A 增聘一位基金经理（现任经理继续管理）</h3>
+              </div>
+              <p class="msg-sum">白话：你持有的中欧医疗健康A 要增加一位新经理，和现任经理葛兰一起管理，原经理不离职。</p>
+              <p class="msg-why"><b>🎯 为什么与你有关</b>：你持有中欧医疗健康A（示例本金 3 万元）。经理是主动型基金的"掌舵人"，团队变化之后，基金的投资风格有可能慢慢改变。</p>
+              <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">中欧医疗健康混合A</span><span class="tag tag-blue">医药赛道</span></div>
+              <div class="msg-foot">
+                <span>中欧基金公告</span><span>·</span><span>09-01 20:15</span>
+                <span class="foot-right">
+                  <button class="icon-btn fav" title="收藏">☆</button>
+                  <button class="icon-btn del" title="忽略">✕</button>
+                </span>
+              </div>
+              <div class="msg-detail">
+                <div class="d-sec"><span class="no b">1</span>发生了什么</div>
+                <p>中欧基金发布公告：中欧医疗健康混合A 增聘一位基金经理，与现任基金经理葛兰共同管理。新任经理此前管理其他医药主题基金，管理规模较小。注意：这是"增聘"（加人），不是"离任"（换人）。</p>
+                <div class="d-sec"><span class="no b">2</span>为什么与你有关</div>
+                <p>主动型基金的钱怎么买，主要靠经理的判断。虽然这次是加人而不是换人，但新经理加入后，未来基金的持仓风格可能慢慢变化——这直接影响你这笔持仓的"性格"。</p>
+                <div class="d-sec"><span class="no b">3</span>可能影响你的哪些持仓</div>
+                <ul class="d-impact">
+                  <li><b>中欧医疗健康混合A</b> → 直接影响（你持有，且这是基金内部变动）</li>
+                  <li>医药赛道 → 无直接影响（只影响这一只基金）</li>
+                </ul>
+                <div class="d-sec"><span class="no b">4</span>影响方向</div>
+                <p><span class="tag tag-orange">待观察</span> 新经理的投资风格和能力需要时间验证。增聘本身说不上利好利空——有些基金公司是为老经理"减负"，有些是培养新人，目前还看不出来。</p>
+                <div class="d-sec"><span class="no b">5</span>接下来最值得观察什么</div>
+                <ul class="d-impact">
+                  <li>下一次季报的前十大重仓股——如果风格明显变化，说明新经理话语权变大</li>
+                  <li>有没有后续公告（例如"增聘变离任"）。真发生这种变化，小财通会第一时间提醒你</li>
+                </ul>
+                <div class="d-sec"><span class="no b">6</span>需要立即操作吗</div>
+                <p class="d-act ok"><b>暂不需要。</b>增聘不等于换人，现任经理还在。先留意后续变化，不要急着做任何操作；也可以在「我的基金 → 中欧医疗健康A」里看看你当初为什么买它、观察重点是什么，对照现在的变化想一想。</p>
+                <div class="d-sec">来源与质量</div>
+                <p>首发来源：中欧基金官网公告 · 09-01 20:15 · 重要度：重大</p>
+                <div class="d-ops">
+                  <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                  <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+                </div>
+                <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+              </div>
+            </article>
+
+          </div><!-- /daily-list -->
+        </div><!-- /今日小结 -->
+
+        <!-- ====== 今日其他相关事件（没进小结，但同样与你的持仓/关注有关） ====== -->
+        <div class="sub-head">
+          <b>今日其他相关事件</b><span>同样与你有关，但重要性比上方小结低一档</span><span class="line"></span>
+        </div>
+
         <!-- 本区域通知设置（独立，默认关闭，首次开启会询问） -->
         <div class="notify-bar" data-zone="follow">
           <span class="nb-ico">🔔</span>
-          <span class="nb-text"><b>我的关注通知：已开启</b><span>重要消息会弹窗提醒 · 首次使用时会询问是否保留</span></span>
+          <span class="nb-text"><b>我的关注通知：已开启</b><span>重要事件会弹窗提醒 · 首次使用时会询问是否保留</span></span>
           <span class="switch"></span>
         </div>
 
-        <!-- 本区域类型筛选（独立记忆） -->
+        <!-- 本区域类型筛选（独立记忆；作用于本列表，不筛选上方小结） -->
         <div class="filters">
           <button class="f-chip active" data-cat="all">全部</button>
           <button class="f-chip" data-cat="report">📊 财报</button>
@@ -174,262 +407,207 @@
           <button class="f-chip" data-cat="event">⚠️ 重大事件</button>
         </div>
 
-        <!-- 重大市场事件（与关注相关，两区域都显示的类型） -->
-        <article class="msg-card event unread" data-cat="event">
-          <div class="msg-head">
-            <span class="msg-dot"></span>
-            <span class="tag tag-event">⚠️ 重大市场事件</span>
-            <span class="tag tag-green">利好</span>
-            <span class="lv lv-major">重大</span>
-            <h3 class="msg-title">央行下调存款准备金率 0.25 个百分点</h3>
-          </div>
-          <p class="msg-sum">白话：央行今天宣布"降准"——银行必须上交给央行的钱变少了，等于向市场放出约 8000 亿元长期资金。</p>
-          <p class="msg-why">💡 为什么值得关注：钱变宽裕后，从历史经验看对股市整体情绪偏正面；你的多数持仓跟着整个市场走，和你的钱直接相关。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">沪深300</span><span class="tag tag-blue">A股整体</span><span class="tag tag-blue">易方达蓝筹精选混合</span><span class="tag tag-blue">招商中证白酒指数A</span></div>
-          <div class="msg-foot">
-            <span>中国人民银行官网</span><span>·</span><span>今日 09:12</span><span>·</span><span>另有 23 家报道</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>中国人民银行今天宣布下调金融机构存款准备金率 0.25 个百分点，预计释放长期资金约 8000 亿元。这是今年第二次降准，目的是保持市场流动性合理充裕。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>沪深300、A股整体 → 偏正面（流动性更宽松，历史上对市场情绪偏正面）</li>
-              <li>易方达蓝筹精选混合、招商中证白酒指数A → 跟着整体市场走，具体幅度看各自持仓结构</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：中国人民银行官网 · 今日 09:12 · 重要度：重大 · 另有 23 家媒体报道同一事件，已自动合并（保留首发来源）</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
-            </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+        <div class="sub-list">
 
-        <!-- 经理变动（重大级别示例） -->
-        <article class="msg-card" data-cat="manager" id="msgManager">
-          <div class="msg-head">
-            <span class="tag tag-blue">👔 经理变动</span>
-            <span class="tag tag-orange">待观察</span>
-            <span class="lv lv-major">重大</span>
-            <h3 class="msg-title">中欧医疗健康混合A 增聘一位基金经理</h3>
-          </div>
-          <p class="msg-sum">白话：你持有的中欧医疗健康A 要增加一位新经理，和现任经理一起管理，原经理不离职。</p>
-          <p class="msg-why">💡 为什么值得关注：经理是主动基金的灵魂，换人之后投资风格可能变化，你持有这只基金，业绩会受影响。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">中欧医疗健康混合A</span><span class="tag tag-blue">医药赛道</span></div>
-          <div class="msg-foot">
-            <span>中欧基金公告</span><span>·</span><span>08-29 20:15</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>中欧基金发布公告：中欧医疗健康混合A 增聘一位基金经理，与现任共同管理；新任经理此前管理其他医药主题基金，管理规模较小。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>中欧医疗健康混合A → 待观察（新经理投资风格未知，需跟踪后续持仓与业绩变化）</li>
-              <li>医药赛道 → 无直接影响</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：中欧基金官网公告 · 08-29 20:15 · 重要度：重大</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 医药审批 -->
+          <article class="msg-card" data-cat="pharma">
+            <div class="msg-head">
+              <span class="tag tag-blue">💊 医药审批</span>
+              <span class="tag tag-green">利好</span>
+              <span class="lv lv-mid">值得关注</span>
+              <h3 class="msg-title">国家药监局批准一款国产创新药上市</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+            <p class="msg-sum">白话：一款国产自主研发的创新药拿到上市许可，用于治疗某类肿瘤，是国内该领域少有的自研新药。</p>
+            <p class="msg-why"><b>🎯 为什么与你有关</b>：你持有的中欧医疗健康A 主要买医药公司。创新药是医药板块最受关注的成长方向之一，这类事件会带动整个医药赛道的投资情绪。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">创新药赛道</span><span class="tag tag-blue">中欧医疗健康混合A</span></div>
+            <div class="msg-foot">
+              <span>国家药监局官网</span><span>·</span><span>09-01 17:40</span><span>·</span><span>另有 6 家报道</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec"><span class="no b">1</span>发生了什么</div>
+              <p>国家药监局批准一款国产创新药上市，用于治疗某类肿瘤。该药由国内药企自主研发，此前已进入优先审评通道。</p>
+              <div class="d-sec"><span class="no b">2</span>为什么与你有关</div>
+              <p>你持有中欧医疗健康A，基金买的是医药公司。创新药获批代表国内药企研发能力在进步，是医药赛道投资情绪的重要风向标之一。</p>
+              <div class="d-sec"><span class="no b">3</span>可能影响你的哪些持仓</div>
+              <ul class="d-impact">
+                <li><b>中欧医疗健康混合A</b> → 间接相关：主要看基金持仓里有没有覆盖相关研发方向的公司，情绪上可能被带动</li>
+              </ul>
+              <div class="d-sec"><span class="no b">4</span>影响方向</div>
+              <p><span class="tag tag-green">偏正面</span> 情绪层面偏正面（研发能力进步的标志）。但一款药的获批不等于相关公司马上多赚钱，实际业绩兑现要等产品上市销售。</p>
+              <div class="d-sec"><span class="no b">5</span>接下来最值得观察什么</div>
+              <ul class="d-impact">
+                <li>该药品上市后的销售放量情况（看的是"能不能卖出去"）</li>
+                <li>同类国产创新药的后续获批进度</li>
+              </ul>
+              <div class="d-sec"><span class="no b">6</span>需要立即操作吗</div>
+              <p class="d-act ok"><b>不需要。</b>这是赛道层面的情绪信号，离你单只基金的业绩还隔着好几层。继续持有观察即可。</p>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：国家药监局官网 · 09-01 17:40 · 重要度：值得关注 · 另有 6 家媒体报道同一事件，已自动合并</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
 
-        <!-- 医药审批 -->
-        <article class="msg-card unread" data-cat="pharma">
-          <div class="msg-head">
-            <span class="msg-dot"></span>
-            <span class="tag tag-blue">💊 医药审批</span>
-            <span class="tag tag-green">利好</span>
-            <h3 class="msg-title">国家药监局批准一款国产创新药上市</h3>
-          </div>
-          <p class="msg-sum">白话：一款国产自主研发的创新药拿到上市许可，用于治疗某类肿瘤，是国内该领域少有的自研新药。</p>
-          <p class="msg-why">💡 为什么值得关注：创新药赛道的重要研发进展；你关注的中欧医疗健康A 重仓医药板块，赛道情绪可能受带动。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">创新药赛道</span><span class="tag tag-blue">中欧医疗健康混合A</span></div>
-          <div class="msg-foot">
-            <span>国家药监局官网</span><span>·</span><span>08-29 17:40</span><span>·</span><span>另有 6 家报道</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>国家药监局批准一款国产创新药上市，用于治疗某类肿瘤。该药由国内药企自主研发，此前已进入优先审评通道。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>创新药赛道 → 偏正面（情绪层面，代表国内研发能力进步）</li>
-              <li>中欧医疗健康混合A → 间接相关，取决于其持仓是否覆盖相关公司</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：国家药监局官网 · 08-29 17:40 · 重要度：值得关注 · 另有 6 家媒体报道同一事件，已自动合并</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 公告：基金调仓 -->
+          <article class="msg-card" data-cat="announce">
+            <div class="msg-head">
+              <span class="tag tag-blue">📄 公告</span>
+              <span class="tag tag-orange">待观察</span>
+              <span class="lv lv-minor">一般</span>
+              <h3 class="msg-title">易方达蓝筹精选混合二季报披露：减持部分消费股、增持某互联网平台公司</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+            <p class="msg-sum">白话：你持有（且标为重仓）的易方达蓝筹精选发布二季报：减持了部分消费股，增持了某互联网平台公司，整体仓位小幅下降。</p>
+            <p class="msg-why"><b>🎯 为什么与你有关</b>：这是你组合里最大的一笔持仓（示例本金 4.3 万元）。从调仓方向能看出经理张坤对未来半年的判断，值得对照你当初的买入理由想一想。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">易方达蓝筹精选混合</span></div>
+            <div class="msg-foot">
+              <span>易方达基金公告</span><span>·</span><span>08-31 09:30</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec"><span class="no b">1</span>发生了什么</div>
+              <p>易方达蓝筹精选混合发布二季报：前十大重仓股有调整，减持了部分消费类股票，增持了某互联网平台公司，整体仓位小幅下降。</p>
+              <div class="d-sec"><span class="no b">2</span>为什么与你有关</div>
+              <p>主动型基金赚不赚钱，很大程度上取决于经理怎么调仓。蓝筹精选是你组合里最大的一笔，经理的判断方向值得你了解——你买入时认可他的方法，现在看他有没有偏离。</p>
+              <div class="d-sec"><span class="no b">3</span>可能影响你的哪些持仓</div>
+              <ul class="d-impact">
+                <li><b>易方达蓝筹精选混合</b> → 直接相关：调仓后基金的"性格"会慢慢变化，但短期净值不会因为一份季报就大起大落</li>
+              </ul>
+              <div class="d-sec"><span class="no b">4</span>影响方向</div>
+              <p><span class="tag tag-orange">待观察</span> 调仓本身没有好坏，只代表经理的判断。减消费、加互联网，可能是看好后者、也可能是控制风险——小财通不替你判断对错，但建议你自己核对是否认同。</p>
+              <div class="d-sec"><span class="no b">5</span>接下来最值得观察什么</div>
+              <ul class="d-impact">
+                <li>增持的互联网公司后续业绩和股价表现——验证经理判断</li>
+                <li>下次季报（三季度末）调仓是延续还是回摆</li>
+              </ul>
+              <div class="d-sec"><span class="no b">6</span>需要立即操作吗</div>
+              <p class="d-act ok"><b>不需要。</b>这份公告只是"报告了过去半年的动作"，不代表未来一定涨或跌。你可以在「我的基金 → 易方达蓝筹精选 → 持仓记录」里翻看你当初写的买入理由和观察重点，对照经理的调仓方向自己想一想，不用急着行动。</p>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：易方达基金公告（巨潮资讯网）· 08-31 09:30 · 重要度：一般</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
 
-        <!-- 财报 -->
-        <article class="msg-card" data-cat="report">
-          <div class="msg-head">
-            <span class="tag tag-blue">📊 财报</span>
-            <span class="tag tag-green">利好</span>
-            <h3 class="msg-title">贵州茅台发布半年报，营收与净利润同比增长约 15%</h3>
-          </div>
-          <p class="msg-sum">白话：贵州茅台公布上半年成绩单：收入、利润都比去年同期增长约 15%，和市场预期基本一致。</p>
-          <p class="msg-why">💡 为什么值得关注：白酒赛道的风向标公司；你持有的招商中证白酒指数A 以白酒股为主，龙头业绩是赛道景气度的重要参考。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">白酒赛道</span><span class="tag tag-blue">招商中证白酒指数A</span></div>
-          <div class="msg-foot">
-            <span>上交所公告（巨潮资讯网）</span><span>·</span><span>08-28 19:05</span><span>·</span><span>另有 8 家报道</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>贵州茅台发布半年报：营业收入、归母净利润均同比增长约 15%，与市场预期基本一致，直销渠道占比继续提升。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>白酒赛道 → 偏正面（龙头业绩稳健，赛道基本面有支撑）</li>
-              <li>招商中证白酒指数A → 主要持仓公司业绩稳健，间接相关</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：上交所公告（巨潮资讯网）· 08-28 19:05 · 重要度：值得关注 · 另有 8 家媒体报道同一事件，已自动合并</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 财报（你关注的赛道） -->
+          <article class="msg-card" data-cat="report">
+            <div class="msg-head">
+              <span class="tag tag-blue">📊 财报</span>
+              <span class="tag tag-green">利好</span>
+              <span class="lv lv-mid">值得关注</span>
+              <h3 class="msg-title">半导体设备龙头发布业绩快报：净利润同比增长超预期</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+            <p class="msg-sum">白话：半导体设备龙头公司上半年净利润同比增长约 35%，比市场预期更好。</p>
+            <p class="msg-why"><b>🎯 为什么与你有关</b>：半导体是你主动关注的研究方向（你在发现页标记了关注）。设备龙头业绩好，通常说明整个赛道的需求旺盛，是你评估要不要进一步研究该赛道的重要参考。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">半导体赛道</span></div>
+            <div class="msg-foot">
+              <span>上交所公告</span><span>·</span><span>08-31 16:45</span><span>·</span><span>另有 4 家报道</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec"><span class="no b">1</span>发生了什么</div>
+              <p>半导体设备龙头公司发布业绩快报：上半年净利润同比增长约 35%，超过市场预期，订单量同步增长。</p>
+              <div class="d-sec"><span class="no b">2</span>为什么与你有关</div>
+              <p>这条事件没有直接关联你持有的基金，但因为半导体是你主动关注的研究方向，这类"赛道风向标"业绩值得你知道——它是你研究这个赛道时的最新事实。</p>
+              <div class="d-sec"><span class="no b">3</span>可能影响你的哪些持仓</div>
+              <ul class="d-impact">
+                <li>你的现有持仓 → 无直接关联（你目前没有半导体基金，仅关注赛道）</li>
+                <li>半导体赛道 → 偏正面：设备端景气说明下游扩产需求仍在</li>
+              </ul>
+              <div class="d-sec"><span class="no b">4</span>影响方向</div>
+              <p><span class="tag tag-green">偏正面</span> 但只代表设备环节，不代表整个半导体产业链都景气——设计、制造、封测各环节冷暖不同。</p>
+              <div class="d-sec"><span class="no b">5</span>接下来最值得观察什么</div>
+              <ul class="d-impact">
+                <li>下游晶圆厂有没有持续扩产的计划（订单的源头）</li>
+                <li>如果你在考虑研究半导体基金，重点看：跟踪什么指数、规模、成立时间、最大回撤</li>
+              </ul>
+              <div class="d-sec"><span class="no b">6</span>需要立即操作吗</div>
+              <p class="d-act ok"><b>不需要。</b>你还没持有半导体基金，这条事件只是"研究参考"。即使将来考虑买入，也要先完整研究，而不是因为一条业绩快报就冲进去。</p>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：上交所公告 · 08-31 16:45 · 重要度：值得关注 · 另有 4 家媒体报道同一事件，已自动合并</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
 
-        <!-- 公告 -->
-        <article class="msg-card" data-cat="announce">
-          <div class="msg-head">
-            <span class="tag tag-blue">📄 公告</span>
-            <span class="tag tag-orange">待观察</span>
-            <h3 class="msg-title">易方达蓝筹精选混合二季报披露前十大重仓股调整</h3>
-          </div>
-          <p class="msg-sum">白话：你持有的易方达蓝筹精选发布二季报：减持了部分消费股，增持了某互联网平台公司。</p>
-          <p class="msg-why">💡 为什么值得关注：从调仓能看出经理对未来方向的判断，值得自己核对一下是否符合你的预期。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">易方达蓝筹精选混合</span></div>
-          <div class="msg-foot">
-            <span>易方达基金公告</span><span>·</span><span>08-27 09:30</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>易方达蓝筹精选混合发布二季报：前十大重仓股有调整，减持了部分消费类股票，增持了某互联网平台公司，整体仓位小幅下降。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>易方达蓝筹精选混合 → 待观察（调仓方向代表经理判断，由你自己核对是否认同）</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：易方达基金公告（巨潮资讯网）· 08-27 09:30 · 重要度：一般</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 财报（利空示例） -->
+          <article class="msg-card" data-cat="report">
+            <div class="msg-head">
+              <span class="tag tag-blue">📊 财报</span>
+              <span class="tag tag-red">利空</span>
+              <span class="lv lv-mid">值得关注</span>
+              <h3 class="msg-title">一家区域白酒上市公司业绩预告：净利润同比下滑约 40%</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+            <p class="msg-sum">白话：一家区域白酒公司预告第三季度业绩不如去年同期，利润可能下滑约 40%。</p>
+            <p class="msg-why"><b>🎯 为什么与你有关</b>：你持有的招商中证白酒指数A 以白酒股为主。不过要提醒：单一公司不代表整个赛道，这件事要和茅台中报等一起看，才能判断是个别问题还是行业问题。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">白酒赛道</span><span class="tag tag-blue">招商中证白酒指数A</span></div>
+            <div class="msg-foot">
+              <span>深交所公告</span><span>·</span><span>08-31 17:00</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec"><span class="no b">1</span>发生了什么</div>
+              <p>一家区域白酒上市公司发布业绩预告：预计第三季度净利润同比下滑约 40%，公司称主要受区域市场动销放缓影响。</p>
+              <div class="d-sec"><span class="no b">2</span>为什么与你有关</div>
+              <p>你持有的招商中证白酒指数A 按权重买整个白酒板块，这只区域酒企也在指数成分里。它的业绩变差，会拖累指数的表现——但它的权重比茅台等龙头小得多，所以影响也小得多。</p>
+              <div class="d-sec"><span class="no b">3</span>可能影响你的哪些持仓</div>
+              <ul class="d-impact">
+                <li><b>招商中证白酒指数A</b> → 间接影响（成分公司之一，权重有限）</li>
+              </ul>
+              <div class="d-sec"><span class="no b">4</span>影响方向</div>
+              <p><span class="tag tag-red">偏负面</span> 对白酒赛道是又一个"动销偏弱"的证据。但要分清：一家区域酒企下滑，可能是它自己的渠道问题，也可能是行业普遍现象——需要和其他白酒公司的业绩对照。</p>
+              <div class="d-sec"><span class="no b">5</span>接下来最值得观察什么</div>
+              <ul class="d-impact">
+                <li>其他白酒公司（尤其是茅台、五粮液等龙头）的三季度数据——比一家区域公司更有代表性</li>
+                <li>白酒批价和库存变化，这是行业冷热的"体温计"</li>
+              </ul>
+              <div class="d-sec"><span class="no b">6</span>需要立即操作吗</div>
+              <p class="d-act ok"><b>不需要。</b>一条业绩预告不构成卖出理由。如果连续多家白酒公司业绩变差、行业数据持续走弱，小财通会给你更完整的提醒，到时再冷静判断。</p>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：深交所公告 · 08-31 17:00 · 重要度：值得关注</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
 
-        <!-- 财报 -->
-        <article class="msg-card" data-cat="report">
-          <div class="msg-head">
-            <span class="tag tag-blue">📊 财报</span>
-            <span class="tag tag-green">利好</span>
-            <h3 class="msg-title">半导体设备龙头发布业绩快报，净利润同比增长超预期</h3>
-          </div>
-          <p class="msg-sum">白话：半导体设备龙头公司上半年净利润同比增长约 35%，比市场预期更好。</p>
-          <p class="msg-why">💡 为什么值得关注：半导体是你关注的赛道；设备龙头业绩好，通常说明整个赛道的需求旺盛。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">半导体赛道</span></div>
-          <div class="msg-foot">
-            <span>上交所公告</span><span>·</span><span>08-26 16:45</span><span>·</span><span>另有 4 家报道</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>半导体设备龙头公司发布业绩快报：上半年净利润同比增长约 35%，超过市场预期，订单量同步增长。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>半导体赛道 → 偏正面（设备端景气说明下游扩产需求仍在）</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：上交所公告 · 08-26 16:45 · 重要度：值得关注 · 另有 4 家媒体报道同一事件，已自动合并</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
-            </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+        </div><!-- /sub-list -->
 
-        <!-- 财报（利空示例） -->
-        <article class="msg-card" data-cat="report">
-          <div class="msg-head">
-            <span class="tag tag-blue">📊 财报</span>
-            <span class="tag tag-red">利空</span>
-            <h3 class="msg-title">一家区域白酒上市公司业绩预告，净利润同比下滑约 40%</h3>
-          </div>
-          <p class="msg-sum">白话：一家区域白酒公司预告第三季度业绩不如去年同期，利润可能下滑约 40%。</p>
-          <p class="msg-why">💡 为什么值得关注：白酒赛道近期整体偏弱，你持有的招商中证白酒指数A 也在其中；不过单一公司不代表整个赛道，请结合其他消息一起看。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">白酒赛道</span><span class="tag tag-blue">招商中证白酒指数A</span></div>
-          <div class="msg-foot">
-            <span>深交所公告</span><span>·</span><span>08-25 17:00</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>一家区域白酒上市公司发布业绩预告：预计第三季度净利润同比下滑约 40%，公司称主要受区域市场动销放缓影响。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>白酒赛道 → 偏负面（单一公司数据，需结合更多公司业绩综合判断）</li>
-              <li>招商中证白酒指数A → 间接相关</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：深交所公告 · 08-25 17:00 · 重要度：一般</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
-            </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
-      </div>
+        <!-- 空状态（筛选后无其他事件时显示） -->
+        <div class="empty-hint" id="followEmpty">该类型下没有其他相关事件——如果今天有重要内容，会出现在上方「今日小结」里。</div>
+      </div><!-- /followZone -->
 
       <!-- ============ 区域二：市场发现 ============ -->
       <div class="msg-list" id="discoverZone" style="display:none;">
-        <div class="zone-banner">🌱 <b>市场发现</b>：你还没关注、但经筛选具有研究价值的方向。默认仅在 APP 内展示、<b>不弹窗打扰</b>；开启通知后只推送「重大」级别的消息。每天最多展示 20 条，按重要度从高到低（本页为示例：今日候选 23 条 → 取前 20）。</div>
+        <div class="zone-banner">🌱 <b>市场发现</b>：你还没关注、但经筛选具有研究价值的方向。它<b>不会进入今日小结、默认不弹窗打扰</b>，只在你想研究时主动来看；开启通知后也只推送「重大」级别的事件。每天最多展示 20 条，按重要度从高到低（本页为示例：今日候选 23 条 → 取前 20）。</div>
 
         <!-- 本区域通知设置（独立，默认关闭，首次开启会询问） -->
         <div class="notify-bar" data-zone="discover">
           <span class="nb-ico">🔕</span>
-          <span class="nb-text"><b>市场发现通知：未开启</b><span>开启后只推送「重大」级别的消息</span></span>
+          <span class="nb-text"><b>市场发现通知：未开启</b><span>开启后只推送「重大」级别的事件</span></span>
           <span class="switch"></span>
         </div>
 
@@ -444,220 +622,227 @@
           <button class="f-chip" data-cat="event">⚠️ 重大事件</button>
         </div>
 
-        <!-- 政策（重大） -->
-        <article class="msg-card" data-cat="policy">
-          <div class="msg-head">
-            <span class="tag tag-blue">🏛 政策</span>
-            <span class="tag tag-green">利好</span>
-            <span class="lv lv-major">重大</span>
-            <h3 class="msg-title">多部门联合印发《关于推动新型储能高质量发展的指导意见》</h3>
-          </div>
-          <p class="msg-sum">白话：国家发改委等多个部门联合发文，明确新型储能到 2030 年的发展目标和电价机制。</p>
-          <p class="msg-why">💡 为什么值得关注：储能赛道景气度较高、政策支持明确，你目前还没关注这个方向，值得研究一下。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">新能源赛道</span><span class="tag tag-blue">储能相关公司</span></div>
-          <div class="msg-foot">
-            <span>国家发改委官网</span><span>·</span><span>08-29 16:20</span><span>·</span><span>另有 15 家报道</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>国家发改委等多部门联合印发指导意见，提出到 2030 年新型储能的发展目标，并明确电价机制、并网规则等配套政策。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>新能源赛道 → 偏正面（政策面支持明确）</li>
-              <li>储能相关公司 → 偏正面（情绪面，具体看政策细则落地情况）</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：国家发改委官网 · 08-29 16:20 · 重要度：重大 · 另有 15 家媒体报道同一事件，已自动合并</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
-            </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+        <div class="sub-list">
 
-        <!-- 重大市场事件（与关注无直接关联，展示在市场发现） -->
-        <article class="msg-card event" data-cat="event">
-          <div class="msg-head">
-            <span class="tag tag-event">⚠️ 重大市场事件</span>
-            <span class="tag tag-orange">待观察</span>
-            <span class="lv lv-major">重大</span>
-            <h3 class="msg-title">国际油价单日大涨 6%，主产油国宣布进一步减产</h3>
-          </div>
-          <p class="msg-sum">白话：主要产油国宣布继续减产，国际油价一天内大涨 6%。</p>
-          <p class="msg-why">💡 为什么值得关注：油价大幅波动会传导到能源、化工、航运等很多行业，也可能影响全球通胀预期，属于全市场级别的事件。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">石油石化赛道</span><span class="tag tag-blue">全球市场</span></div>
-          <div class="msg-foot">
-            <span>权威财经媒体（综合）</span><span>·</span><span>08-27 06:40</span><span>·</span><span>另有 18 家报道</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>主要产油国组织宣布进一步减产，国际油价单日上涨 6%，创近期单日最大涨幅。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>石油石化赛道 → 偏正面</li>
-              <li>航空、航运等用油行业 → 偏负面（成本上升）</li>
-              <li>对你目前的持仓 → 无直接关联，整体影响方向标注"待观察"</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：权威财经媒体（综合）· 08-27 06:40 · 重要度：重大 · 另有 18 家媒体报道同一事件，已自动合并</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 政策（重大） -->
+          <article class="msg-card" data-cat="policy">
+            <div class="msg-head">
+              <span class="tag tag-blue">🏛 政策</span>
+              <span class="tag tag-green">利好</span>
+              <span class="lv lv-major">重大</span>
+              <h3 class="msg-title">多部门联合印发《关于推动新型储能高质量发展的指导意见》</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+            <p class="msg-sum">白话：国家发改委等多个部门联合发文，明确新型储能到 2030 年的发展目标和电价机制。</p>
+            <p class="msg-why">💡 为什么值得关注：储能赛道景气度较高、政策支持明确，你目前还没关注这个方向，值得研究一下。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">新能源赛道</span><span class="tag tag-blue">储能相关公司</span></div>
+            <div class="msg-foot">
+              <span>国家发改委官网</span><span>·</span><span>09-01 16:20</span><span>·</span><span>另有 15 家报道</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec">发生了什么（完整说明）</div>
+              <p>国家发改委等多部门联合印发指导意见，提出到 2030 年新型储能的发展目标，并明确电价机制、并网规则等配套政策。</p>
+              <div class="d-sec">可能影响什么</div>
+              <ul class="d-impact">
+                <li>新能源赛道 → 偏正面（政策面支持明确）</li>
+                <li>储能相关公司 → 偏正面（情绪面，具体看政策细则落地情况）</li>
+              </ul>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：国家发改委官网 · 09-01 16:20 · 重要度：重大 · 另有 15 家媒体报道同一事件，已自动合并</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
 
-        <!-- 财报 -->
-        <article class="msg-card" data-cat="report">
-          <div class="msg-head">
-            <span class="tag tag-blue">📊 财报</span>
-            <span class="tag tag-orange">待观察</span>
-            <span class="lv lv-mid">值得关注</span>
-            <h3 class="msg-title">光伏组件龙头半年报：仍亏损但亏损大幅收窄</h3>
-          </div>
-          <p class="msg-sum">白话：光伏组件龙头公司上半年还在亏损，但亏损额比之前明显缩小，公司称行业"价格战"最激烈的阶段可能已经过去。</p>
-          <p class="msg-why">💡 为什么值得关注：光伏是新能源赛道的重要部分；龙头业绩企稳可能是行业见底的信号之一，值得研究，但不要当成定论。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">新能源赛道</span></div>
-          <div class="msg-foot">
-            <span>深交所公告</span><span>·</span><span>08-28 18:30</span><span>·</span><span>另有 9 家报道</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>光伏组件龙头公司发布半年报：仍处于亏损状态，但亏损幅度较去年同期明显收窄；公司在说明中表示行业"价格战"最激烈的阶段可能已经过去。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>新能源赛道 → 待观察（龙头企稳是积极信号，但行业整体盈利恢复还需时间验证）</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：深交所公告 · 08-28 18:30 · 重要度：值得关注 · 另有 9 家媒体报道同一事件，已自动合并</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 重大市场事件（与关注无直接关联，展示在市场发现） -->
+          <article class="msg-card event" data-cat="event">
+            <div class="msg-head">
+              <span class="tag tag-event">⚠️ 重大市场事件</span>
+              <span class="tag tag-orange">待观察</span>
+              <span class="lv lv-major">重大</span>
+              <h3 class="msg-title">国际油价单日大涨 6%，主产油国宣布进一步减产</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+            <p class="msg-sum">白话：主要产油国宣布继续减产，国际油价一天内大涨 6%。</p>
+            <p class="msg-why">💡 为什么值得关注：油价大幅波动会传导到能源、化工、航运等很多行业，也可能影响全球通胀预期，属于全市场级别的事件。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">石油石化赛道</span><span class="tag tag-blue">全球市场</span></div>
+            <div class="msg-foot">
+              <span>权威财经媒体（综合）</span><span>·</span><span>08-27 06:40</span><span>·</span><span>另有 18 家报道</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec">发生了什么（完整说明）</div>
+              <p>主要产油国组织宣布进一步减产，国际油价单日上涨 6%，创近期单日最大涨幅。</p>
+              <div class="d-sec">可能影响什么</div>
+              <ul class="d-impact">
+                <li>石油石化赛道 → 偏正面</li>
+                <li>航空、航运等用油行业 → 偏负面（成本上升）</li>
+                <li>对你目前的持仓 → 无直接关联，整体影响方向标注"待观察"</li>
+              </ul>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：权威财经媒体（综合）· 08-27 06:40 · 重要度：重大 · 另有 18 家媒体报道同一事件，已自动合并</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
 
-        <!-- 医药审批（海外） -->
-        <article class="msg-card" data-cat="pharma">
-          <div class="msg-head">
-            <span class="tag tag-blue">💊 医药审批</span>
-            <span class="tag tag-green">利好</span>
-            <span class="lv lv-mid">值得关注</span>
-            <h3 class="msg-title">美国 FDA 批准一款新型药物上市（海外动态）</h3>
-          </div>
-          <p class="msg-sum">白话：美国药监局批准了一款新型药物上市，是同类药物中的第一个。</p>
-          <p class="msg-why">💡 为什么值得关注：海外新药获批反映全球医药创新节奏，A 股相关研发方向的公司可能有联动，属于全球市场动态。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">医药赛道</span><span class="tag tag-blue">全球市场</span></div>
-          <div class="msg-foot">
-            <span>FDA 官网（转载自权威媒体）</span><span>·</span><span>08-28 08:00</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>美国 FDA 批准一款新型药物上市，为该类别中的首个获批产品，用于治疗某慢性疾病。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>医药赛道 → 偏正面（全球创新节奏的参考信号）</li>
-              <li>全球市场 → 相关研发方向的公司可能有联动</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：FDA 官网（转载自权威媒体）· 08-28 08:00 · 重要度：值得关注</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 财报 -->
+          <article class="msg-card" data-cat="report">
+            <div class="msg-head">
+              <span class="tag tag-blue">📊 财报</span>
+              <span class="tag tag-orange">待观察</span>
+              <span class="lv lv-mid">值得关注</span>
+              <h3 class="msg-title">光伏组件龙头半年报：仍亏损但亏损大幅收窄</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+            <p class="msg-sum">白话：光伏组件龙头公司上半年还在亏损，但亏损额比之前明显缩小，公司称行业"价格战"最激烈的阶段可能已经过去。</p>
+            <p class="msg-why">💡 为什么值得关注：光伏是新能源赛道的重要部分；龙头业绩企稳可能是行业见底的信号之一，值得研究，但不要当成定论。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">新能源赛道</span></div>
+            <div class="msg-foot">
+              <span>深交所公告</span><span>·</span><span>08-28 18:30</span><span>·</span><span>另有 9 家报道</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec">发生了什么（完整说明）</div>
+              <p>光伏组件龙头公司发布半年报：仍处于亏损状态，但亏损幅度较去年同期明显收窄；公司在说明中表示行业"价格战"最激烈的阶段可能已经过去。</p>
+              <div class="d-sec">可能影响什么</div>
+              <ul class="d-impact">
+                <li>新能源赛道 → 待观察（龙头企稳是积极信号，但行业整体盈利恢复还需时间验证）</li>
+              </ul>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：深交所公告 · 08-28 18:30 · 重要度：值得关注 · 另有 9 家媒体报道同一事件，已自动合并</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
 
-        <!-- 政策 -->
-        <article class="msg-card" data-cat="policy">
-          <div class="msg-head">
-            <span class="tag tag-blue">🏛 政策</span>
-            <span class="tag tag-green">利好</span>
-            <span class="lv lv-mid">值得关注</span>
-            <h3 class="msg-title">多个城市落地房地产"收储"政策</h3>
-          </div>
-          <p class="msg-sum">白话：又有多个城市宣布落地"收储"：收购存量商品房，用作保障性住房。</p>
-          <p class="msg-why">💡 为什么值得关注：房地产政策从中央定调到地方落地，地产链相关行业可能发生变化，值得了解进展。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">房地产及产业链</span></div>
-          <div class="msg-foot">
-            <span>地方政府公告（综合）</span><span>·</span><span>08-27 10:20</span><span>·</span><span>另有 12 家报道</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>多个城市宣布落地房地产"收储"政策：由地方收购存量商品房，用作保障性住房，并公布了收购条件与规模。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>房地产及产业链 → 偏正面（政策落地是实质性进展，具体效果看执行规模）</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：地方政府公告（综合）· 08-27 10:20 · 重要度：值得关注 · 另有 12 家媒体报道同一事件，已自动合并</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 医药审批（海外） -->
+          <article class="msg-card" data-cat="pharma">
+            <div class="msg-head">
+              <span class="tag tag-blue">💊 医药审批</span>
+              <span class="tag tag-green">利好</span>
+              <span class="lv lv-mid">值得关注</span>
+              <h3 class="msg-title">美国 FDA 批准一款新型药物上市（海外动态）</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
+            <p class="msg-sum">白话：美国药监局批准了一款新型药物上市，是同类药物中的第一个。</p>
+            <p class="msg-why">💡 为什么值得关注：海外新药获批反映全球医药创新节奏，A 股相关研发方向的公司可能有联动，属于全球市场动态。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">医药赛道</span><span class="tag tag-blue">全球市场</span></div>
+            <div class="msg-foot">
+              <span>FDA 官网（转载自权威媒体）</span><span>·</span><span>08-28 08:00</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec">发生了什么（完整说明）</div>
+              <p>美国 FDA 批准一款新型药物上市，为该类别中的首个获批产品，用于治疗某慢性疾病。</p>
+              <div class="d-sec">可能影响什么</div>
+              <ul class="d-impact">
+                <li>医药赛道 → 偏正面（全球创新节奏的参考信号）</li>
+                <li>全球市场 → 相关研发方向的公司可能有联动</li>
+              </ul>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：FDA 官网（转载自权威媒体）· 08-28 08:00 · 重要度：值得关注</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
 
-        <!-- 公告 -->
-        <article class="msg-card" data-cat="announce">
-          <div class="msg-head">
-            <span class="tag tag-blue">📄 公告</span>
-            <span class="tag tag-orange">待观察</span>
-            <span class="lv lv-minor">一般</span>
-            <h3 class="msg-title">某军工央企发布重组进展公告</h3>
-          </div>
-          <p class="msg-sum">白话：一家军工央企公告了与另一家央企的重组最新进展，进入实质性推进阶段。</p>
-          <p class="msg-why">💡 为什么值得关注：央企重组是近年主线之一，公告代表实质性推进；军工赛道你还没关注，可以从这件事开始了解。</p>
-          <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">军工赛道</span></div>
-          <div class="msg-foot">
-            <span>上交所公告</span><span>·</span><span>08-26 15:00</span>
-            <span class="foot-right">
-              <button class="icon-btn fav" title="收藏">☆</button>
-              <button class="icon-btn del" title="忽略">✕</button>
-            </span>
-          </div>
-          <div class="msg-detail">
-            <div class="d-sec">发生了什么（完整说明）</div>
-            <p>一家军工央企发布公告，披露与另一家央企重组的最新进展，重组方案已进入实质性推进阶段。</p>
-            <div class="d-sec">可能影响什么</div>
-            <ul class="d-impact">
-              <li>军工赛道 → 待观察（重组效果取决于后续整合，短期情绪面偏正面）</li>
-            </ul>
-            <div class="d-sec">来源与质量</div>
-            <p>首发来源：上交所公告 · 08-26 15:00 · 重要度：一般</p>
-            <div class="d-ops">
-              <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
-              <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+          <!-- 政策 -->
+          <article class="msg-card" data-cat="policy">
+            <div class="msg-head">
+              <span class="tag tag-blue">🏛 政策</span>
+              <span class="tag tag-green">利好</span>
+              <span class="lv lv-mid">值得关注</span>
+              <h3 class="msg-title">多个城市落地房地产"收储"政策</h3>
             </div>
-            <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
-          </div>
-        </article>
-      </div>
+            <p class="msg-sum">白话：又有多个城市宣布落地"收储"：收购存量商品房，用作保障性住房。</p>
+            <p class="msg-why">💡 为什么值得关注：房地产政策从中央定调到地方落地，地产链相关行业可能发生变化，值得了解进展。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">房地产及产业链</span></div>
+            <div class="msg-foot">
+              <span>地方政府公告（综合）</span><span>·</span><span>08-27 10:20</span><span>·</span><span>另有 12 家报道</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec">发生了什么（完整说明）</div>
+              <p>多个城市宣布落地房地产"收储"政策：由地方收购存量商品房，用作保障性住房，并公布了收购条件与规模。</p>
+              <div class="d-sec">可能影响什么</div>
+              <ul class="d-impact">
+                <li>房地产及产业链 → 偏正面（政策落地是实质性进展，具体效果看执行规模）</li>
+              </ul>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：地方政府公告（综合）· 08-27 10:20 · 重要度：值得关注 · 另有 12 家媒体报道同一事件，已自动合并</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
+
+          <!-- 公告 -->
+          <article class="msg-card" data-cat="announce">
+            <div class="msg-head">
+              <span class="tag tag-blue">📄 公告</span>
+              <span class="tag tag-orange">待观察</span>
+              <span class="lv lv-minor">一般</span>
+              <h3 class="msg-title">某军工央企发布重组进展公告</h3>
+            </div>
+            <p class="msg-sum">白话：一家军工央企公告了与另一家央企的重组最新进展，进入实质性推进阶段。</p>
+            <p class="msg-why">💡 为什么值得关注：央企重组是近年主线之一，公告代表实质性推进；军工赛道你还没关注，可以从这件事开始了解。</p>
+            <div class="msg-impact"><span class="i-label">可能影响</span><span class="tag tag-blue">军工赛道</span></div>
+            <div class="msg-foot">
+              <span>上交所公告</span><span>·</span><span>08-26 15:00</span>
+              <span class="foot-right">
+                <button class="icon-btn fav" title="收藏">☆</button>
+                <button class="icon-btn del" title="忽略">✕</button>
+              </span>
+            </div>
+            <div class="msg-detail">
+              <div class="d-sec">发生了什么（完整说明）</div>
+              <p>一家军工央企发布公告，披露与另一家央企重组的最新进展，重组方案已进入实质性推进阶段。</p>
+              <div class="d-sec">可能影响什么</div>
+              <ul class="d-impact">
+                <li>军工赛道 → 待观察（重组效果取决于后续整合，短期情绪面偏正面）</li>
+              </ul>
+              <div class="d-sec">来源与质量</div>
+              <p>首发来源：上交所公告 · 08-26 15:00 · 重要度：一般</p>
+              <div class="d-ops">
+                <a class="btn btn-ghost btn-sm" href="#">查看原文 ↗（示例）</a>
+                <button class="btn btn-ghost btn-sm del">✕ 忽略</button>
+              </div>
+              <div class="d-disclaimer">以上为规则生成的解读，仅供研究参考，不构成投资建议</div>
+            </div>
+          </article>
+
+        </div><!-- /sub-list -->
+
+        <!-- 空状态 -->
+        <div class="empty-hint" id="discoverEmpty">该类型下今天没有候选事件（本页为示例数据，实际版每天最多展示 20 条）。</div>
+      </div><!-- /discoverZone -->
     </div>
 
     <!-- ==================== 右：侧栏 ==================== -->
@@ -666,40 +851,42 @@
       <div class="card">
         <div class="card-title">通知设置 <span class="hint">只控制桌面弹窗</span></div>
         <div class="notif-row">
-          <div class="t"><b>重大市场事件</b><span>消息中心内醒目显示 · 通知默认关</span></div>
+          <div class="t"><b>重大市场事件</b><span>本页内醒目显示 · 通知默认关</span></div>
           <span class="switch" id="eventSwitch"></span>
         </div>
-        <div class="card-hint">桌面通知默认开启，首次使用时小财通会主动询问你是否保留；总状态与盯盘提醒页统一，三个子开关（我的关注 / 市场发现 / 重大市场事件）各自独立。重大市场事件在消息中心内靠橙色左边条 + ⚠️ 标记 +「重大」徽章提高视觉优先级；同一事件只推一次。</div>
+        <div class="card-hint">桌面通知默认开启，首次使用时小财通会主动询问你是否保留；总状态与盯盘提醒页统一，三个子开关（我的关注 / 市场发现 / 重大市场事件）各自独立。重大市场事件在本页内靠橙色左边条 + ⚠️ 标记 +「重大」徽章提高视觉优先级；同一事件只推一次。</div>
         <button class="btn btn-sm" id="demoToastBtn" style="width:100%; justify-content:center; margin-top:12px;">🖥 网页通知效果预览（模拟）</button>
         <button class="btn btn-ghost btn-sm" id="resetDemoBtn" style="width:100%; justify-content:center; margin-top:8px;">🔄 重置通知演示</button>
       </div>
 
-      <!-- 今日概览 -->
+      <!-- 今天与你有关 -->
       <div class="card">
-        <div class="card-title">今日概览 <span class="hint">示例</span></div>
+        <div class="card-title">今天与你有关 <span class="hint">示例</span></div>
         <div class="stat-grid">
-          <div class="s-item"><div class="v" id="stNew">13 条</div><div class="l">今日新增</div></div>
-          <div class="s-item"><div class="v" id="stUnread">2</div><div class="l">未读</div></div>
+          <div class="s-item hot"><div class="v" id="stRel">7 条</div><div class="l">与你有关的事件（我的关注）</div></div>
+          <div class="s-item hot"><div class="v" id="stTop">3 件</div><div class="l">最重要 · 在今日小结</div></div>
+          <div class="s-item"><div class="v" id="stUnread">3</div><div class="l">未读</div></div>
           <div class="s-item"><div class="v" id="stFav">0</div><div class="l">已收藏</div></div>
-          <div class="s-item"><div class="v">0</div><div class="l">已忽略</div></div>
         </div>
-        <div class="card-hint">市场发现今日候选 23 条 → 按重要度取前 20 条</div>
+        <div class="card-hint">示例：今日市场事件约 230 条 → 白名单来源 + 规则过滤 → 滤掉约 223 条无关事件 → 与你有关的 7 条里，最重要的 3 件进小结</div>
       </div>
 
       <!-- 筛选规则说明 -->
       <div class="card">
-        <div class="card-title">这些消息怎么来的</div>
+        <div class="card-title">这些事件怎么来的</div>
         <ul class="rule-list">
           <li>白名单来源：交易所、证监会、基金公司公告、权威财经媒体（可自定义）</li>
           <li>硬过滤：标题党、"必涨""翻倍"等营销内容直接剔除</li>
           <li>自动去重：同一事件多家报道合并，保留首发来源</li>
+          <li>相关性过滤：只有和你持仓的基金、重仓公司、关注的赛道/经理/指数相关的，才进「我的关注」</li>
           <li>重要度三档「重大 / 值得关注 / 一般」：按类型、影响范围、来源权威度综合评定；底层用数值评分排序，界面只显示等级</li>
+          <li>今日小结：每天把最重要的 1~3 件放最上面——先看小结就够了，其余在下方列表</li>
         </ul>
       </div>
     </aside>
   </div>
 
-  <div class="demo-note">✓ 界面原型（示例消息，非真实数据）。所有消息均为虚构示例，用于体验页面结构；白话解读由规则模板生成，仅供研究参考，不构成投资建议；影响方向为规则判断，拿不准时标注「待观察」。点击卡片可展开完整说明；两个区域的内容、类型筛选、通知设置彼此独立；重要度只显示等级不显示数字；桌面通知默认开启、首次进入本页会主动询问是否保留、选择后记住不再打扰；保留后会继续询问「登录时自动启动」；总状态与盯盘提醒页统一；右侧栏可预览通知效果、重置演示状态；重大市场事件在消息中心内靠醒目样式（橙色左边条 + ⚠️ 标记 +「重大」徽章）提高视觉优先级。<b>本页已定稿（2026-08-30）。</b></div>
+  <div class="demo-note">✓ 界面原型（<b>2026-09-02 强化版，待验收</b>，示例事件非真实数据）。本页核心改为「今天与你有关」：顶部<b>今日小结</b>展示今天与你有关的 7 条里最重要的 3 件（透明展示筛选过程：约 230 条 → 7 条 → 3 件）；下方「今日其他相关事件」；每条事件点击展开后按<b>六段拆解</b>：①发生了什么 ②为什么与你有关 ③影响哪些持仓 ④影响方向 ⑤接下来观察什么 ⑥需要立即操作吗；贵州茅台卡片为<b>财报拆解</b>示例（营收/利润/增长/管理层说了什么/注意点/为什么影响你的基金，其中财务数字为虚构示例）。所有事件、日期、金额均为虚构，用于体验页面结构与白话拆解方式；影响方向为规则判断，拿不准标注「待观察」；「市场发现」在独立 Tab、不进小结、默认不推送。点击卡片可展开；收藏/忽略/区域筛选/通知询问等交互可正常体验。<b>本页尚未定稿，等待你验收。</b></div>
 </main>
 
 <!-- 桌面通知首次询问（首次使用需要桌面通知的功能时主动弹出） -->
@@ -740,12 +927,18 @@
   var curZone = 'follow';
   var catState = { follow: 'all', discover: 'all' }; // 每个区域的筛选独立记忆
 
-  function cards (zone) { return zones[zone].querySelectorAll('.msg-card'); }
+  /* 类型筛选只作用于各自的 sub-list（我的关注=今日其他事件；市场发现=全部候选），不筛上方小结 */
+  function cards (zone) { return zones[zone].querySelectorAll('.sub-list .msg-card'); }
 
   function applyFilter (zone) {
+    var shown = 0;
     cards(zone).forEach(function (c) {
-      c.style.display = (catState[zone] === 'all' || c.dataset.cat === catState[zone]) ? '' : 'none';
+      var on = (catState[zone] === 'all' || c.dataset.cat === catState[zone]);
+      c.style.display = on ? '' : 'none';
+      if (on) shown++;
     });
+    var e = zones[zone].querySelector('.empty-hint');
+    if (e) e.classList.toggle('show', shown === 0);
   }
 
   /* ---------- 区域切换 ---------- */
@@ -790,6 +983,7 @@
     if (n) n.classList.add('show');
     updateCounts();
     updateStats();
+    applyFilter(curZone);
   }
 
   ['follow', 'discover'].forEach(function (z) {
@@ -814,15 +1008,17 @@
   }
 
   function updateStats () {
-    var total = 0, unread = 0, favs = 0;
+    var rel = zones.follow.querySelectorAll('.msg-card').length;          /* 与你有关的事件（我的关注全部） */
+    var top = zones.follow.querySelectorAll('.daily-card .msg-card').length; /* 其中进今日小结的条数 */
+    var unread = 0, favs = 0;
     ['follow', 'discover'].forEach(function (z) {
       zones[z].querySelectorAll('.msg-card').forEach(function (c) {
-        total++;
         if (c.classList.contains('unread')) unread++;
         if (c.querySelector('.fav.on')) favs++;
       });
     });
-    document.getElementById('stNew').textContent = total + ' 条';
+    document.getElementById('stRel').textContent = rel + ' 条';
+    document.getElementById('stTop').textContent = top + ' 件';
     document.getElementById('stUnread').textContent = unread;
     document.getElementById('stFav').textContent = favs;
   }
@@ -834,8 +1030,8 @@
      - 选择后记住，不再重复询问；设置中可随时改
      ========================================================== */
   var NOTIFY_DESC = {
-    follow:   { name: '我的关注通知', offDesc: '开启后重要消息会弹窗提醒', onDesc: '重要消息会弹窗提醒 · 可在「设置」中修改' },
-    discover: { name: '市场发现通知', offDesc: '开启后只推送「重大」级别的消息', onDesc: '只推送「重大」级别的消息 · 可在「设置」中修改' },
+    follow:   { name: '我的关注通知', offDesc: '开启后重要事件会弹窗提醒', onDesc: '重要事件会弹窗提醒 · 可在「设置」中修改' },
+    discover: { name: '市场发现通知', offDesc: '开启后只推送「重大」级别的事件', onDesc: '只推送「重大」级别的事件 · 可在「设置」中修改' },
     event:    { name: '重大市场事件通知', offDesc: '开启后重大事件会弹窗提醒', onDesc: '重大事件会弹窗提醒 · 可在「设置」中修改' }
   };
 
@@ -857,7 +1053,7 @@
     bar.querySelector('.nb-ico').textContent = on ? '🔔' : '🔕';
     if (!m) {
       bar.querySelector('.nb-text b').textContent = d.name + '：已关闭';
-      bar.querySelector('.nb-text span').textContent = '你选择了关闭桌面通知 · 消息仍会正常进入消息中心 · 点击开关可重新开启';
+      bar.querySelector('.nb-text span').textContent = '你选择了关闭桌面通知 · 事件仍会正常显示在本页 · 点击开关可重新开启';
     } else {
       bar.querySelector('.nb-text b').textContent = d.name + (on ? '：已开启' : '：未开启');
       bar.querySelector('.nb-text span').textContent = on ? d.onDesc : d.offDesc;
@@ -884,7 +1080,7 @@
     if (!localStorage.getItem('xltc-notify-asked')) openAsk(false, null);
   }
 
-  /* 首次进入消息页 → 主动询问（延时片刻，避免一进来就弹） */
+  /* 首次进入市场事件页 → 主动询问（延时片刻，避免一进来就弹） */
   setTimeout(maybeAskNotify, 1200);
 
   document.getElementById('notifyAskYesBtn').addEventListener('click', function () {
@@ -909,7 +1105,7 @@
     document.getElementById('notifyModal').classList.remove('open');
     ['follow', 'discover'].forEach(renderNotify);
     renderEv();
-    sysNote('已记住你的选择：关闭桌面通知。消息仍会正常进入消息中心；可在「设置」中随时重新开启');
+    sysNote('已记住你的选择：关闭桌面通知。事件仍会正常显示在本页；可在「设置」中随时重新开启');
   });
 
   /* 分区开关：待确认 → 询问；已关 → 用户主动点击则重新询问（相当于"在设置中重新开启"，由用户决定）；已开 → 正常切换 */
@@ -974,10 +1170,10 @@
   document.getElementById('demoToastBtn').addEventListener('click', function () {
     window.showToast({
       title: '你关注的基金经理发生变动',
-      body: '易方达××基金发布基金经理变更公告',
+      body: '中欧医疗健康混合A 增聘一位基金经理',
       time: '2分钟前',
       onClick: function () {
-        /* 模拟跳转：切到「我的关注」并定位到经理变动消息 */
+        /* 模拟跳转：切到「我的关注」并定位到经理变动事件（在今日小结里） */
         document.querySelector('.zone-btn[data-zone="follow"]').click();
         var el = document.getElementById('msgManager');
         if (el) {

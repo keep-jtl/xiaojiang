@@ -82,7 +82,7 @@
   .modal .m-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
   .freq-note { font-size: 11px; color: var(--ink-3); background: var(--bg); border-radius: 8px; padding: 8px 10px; margin-top: 12px; line-height: 1.6; }
 
-  /* 桌面通知总状态条（与消息页共用统一总状态） */
+  /* 桌面通知总状态条（与市场事件页共用统一总状态） */
   .ntf-bar { display: flex; align-items: center; gap: 10px; background: var(--bg-soft); border: 1px solid var(--card-border); border-radius: 10px; padding: 8px 14px; margin-bottom: 16px; font-size: 12.5px; color: var(--ink-2); }
   .ntf-bar.on { border-color: var(--brand); }
   .ntf-bar .nb-text { flex: 1; min-width: 0; }
@@ -136,10 +136,10 @@
   <!-- 系统提示条（通知询问结果等） -->
   <div class="history-note" id="sysNote" style="display:none;"></div>
 
-  <!-- 桌面通知总状态 + 盯盘提醒子开关（与消息页共用统一总状态） -->
+  <!-- 桌面通知总状态 + 盯盘提醒子开关（与市场事件页共用统一总状态） -->
   <div class="ntf-bar" id="alertsNtfBar">
     <span class="nb-ico">🔔</span>
-    <span class="nb-text"><b>桌面通知：已开启</b><span>盯盘提醒通知：已开启 · 与消息页共用统一总状态</span></span>
+    <span class="nb-text"><b>桌面通知：已开启</b><span>盯盘提醒通知：已开启 · 与市场事件页共用统一总状态</span></span>
     <span class="switch" id="alertsSubSwitch"></span>
   </div>
 
@@ -156,7 +156,7 @@
     <div class="card-title">🖥 网页通知效果预览（模拟） <span class="hint">只演示通知内容与排版 · 真实系统通知留待正式 App 阶段</span></div>
     <div class="page-actions" style="margin-bottom:0; justify-content:flex-start;">
       <button class="btn btn-ghost btn-sm" id="demoToastAlert">模拟：盯盘提醒通知</button>
-      <button class="btn btn-ghost btn-sm" id="demoToastNews">模拟：重要消息通知</button>
+      <button class="btn btn-ghost btn-sm" id="demoToastNews">模拟：市场事件通知</button>
       <button class="btn btn-ghost btn-sm" id="resetDemoBtn">🔄 重置通知演示</button>
     </div>
   </div>
@@ -416,7 +416,7 @@
     </div>
   </div>
 
-  <!-- 桌面通知首次询问（首次创建提醒 / 首次使用消息功能时主动弹出） -->
+  <!-- 桌面通知首次询问（首次创建提醒 / 首次使用市场事件功能时主动弹出） -->
   <div class="modal-mask" id="notifyAskModal">
     <div class="modal">
       <h3>🔔 桌面通知</h3>
@@ -443,7 +443,7 @@
     </div>
   </div>
 
-  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。「＋ 添加提醒」可打开面板演示完整流程：选对象 → 设条件 → 有效期快捷选项 → 备注 → 保存。「提前设置 · 未来生效」分组是新增需求演示。<b>本页已定稿（2026-08-29）</b>：有效期方案已确认（仅下一交易日/持续到触发/自定义时间范围，底层统一为起止日期）；备注仅你自己可见，小财通不解读、不构成建议、不代为买卖。外观方案与响应式布局已确认（2026-08-29）。<b>新增后台运行演示（2026-08-30，需求见产品规划第 22 节）</b>：首次保存提醒后询问「登录时自动启动」；顶栏「⏻ 演示关闭窗口」体验关闭提示（可记住选择）、最小化到后台（托盘菜单：打开主界面 / 暂停所有提醒 / 退出）与退出二次确认。「🖥 网页通知效果预览」卡片只模拟网页内的通知样式（真实 Windows/macOS 系统通知留待正式 App 阶段）；桌面通知默认开启，首次创建提醒时主动询问是否保留；顶部通知状态条与消息页共用统一总状态。</div>
+  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。「＋ 添加提醒」可打开面板演示完整流程：选对象 → 设条件 → 有效期快捷选项 → 备注 → 保存。「提前设置 · 未来生效」分组是新增需求演示。<b>本页已定稿（2026-08-29）</b>：有效期方案已确认（仅下一交易日/持续到触发/自定义时间范围，底层统一为起止日期）；备注仅你自己可见，小财通不解读、不构成建议、不代为买卖。外观方案与响应式布局已确认（2026-08-29）。<b>新增后台运行演示（2026-08-30，需求见产品规划第 22 节）</b>：首次保存提醒后询问「登录时自动启动」；顶栏「⏻ 演示关闭窗口」体验关闭提示（可记住选择）、最小化到后台（托盘菜单：打开主界面 / 暂停所有提醒 / 退出）与退出二次确认。「🖥 网页通知效果预览」卡片只模拟网页内的通知样式（真实 Windows/macOS 系统通知留待正式 App 阶段）；桌面通知默认开启，首次创建提醒时主动询问是否保留；顶部通知状态条与市场事件页共用统一总状态。</div>
 </main>
 
 <script src="nav.js"></script>
@@ -699,7 +699,7 @@
     doExit();
   });
 
-  /* ---------- 桌面通知总状态（与消息页统一；默认开启，首次使用时询问是否保留） ---------- */
+  /* ---------- 桌面通知总状态（与市场事件页统一；默认开启，首次使用时询问是否保留） ---------- */
   function sysNote (text) {
     var n = document.getElementById('sysNote');
     n.textContent = text;
@@ -724,7 +724,7 @@
       bar.querySelector('.nb-text span').textContent = '你选择了关闭 · 提醒触发后会在历史记录留痕、不弹窗 · 点击右侧开关可重新开启';
     } else if (sub) {
       bar.querySelector('.nb-text b').textContent = '桌面通知：已开启';
-      bar.querySelector('.nb-text span').textContent = '盯盘提醒通知：已开启 · 与消息页共用统一总状态';
+      bar.querySelector('.nb-text span').textContent = '盯盘提醒通知：已开启 · 与市场事件页共用统一总状态';
     } else {
       bar.querySelector('.nb-text b').textContent = '桌面通知：已开启';
       bar.querySelector('.nb-text span').textContent = '盯盘提醒通知：未开启 · 触发后只在历史记录留痕';
@@ -764,7 +764,7 @@
     localStorage.setItem('xltc-notify-alerts', alertsSubOn() ? '0' : '1');
     renderAlertsNtf();
   });
-  /* 跨页面同步：消息页改变总状态时，本页立即刷新显示 */
+  /* 跨页面同步：市场事件页改变总状态时，本页立即刷新显示 */
   window.addEventListener('storage', function (e) {
     if (e.key && e.key.indexOf('xltc-notify') === 0) renderAlertsNtf();
   });
