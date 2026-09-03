@@ -30,13 +30,14 @@
   .alert-card .obj .n { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .alert-card .obj .d { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
   .alert-card .cond { flex-shrink: 0; text-align: left; font-size: 13px; min-width: 180px; }
-  .alert-card .cond .c { background: var(--tag-blue-bg); color: var(--tag-blue-ink); border-radius: 8px; padding: 5px 10px; font-weight: 600; white-space: nowrap; }
+  .alert-card .cond .c { background: var(--tag-blue-bg); color: var(--tag-blue-ink); border-radius: 8px; padding: 5px 10px; font-weight: 600; white-space: nowrap; display: inline-block; }
   .alert-card .cond .note { font-size: 11px; color: var(--ink-3); margin-top: 4px; }
-  .alert-card .last { flex-shrink: 0; font-size: 12px; color: var(--ink-3); text-align: right; min-width: 90px; }
-  .alert-card .last b { color: var(--ink-2); display: block; font-weight: 500; }
   .alert-card .eff { flex-shrink: 0; font-size: 12px; color: var(--ink-3); text-align: right; min-width: 150px; }
   .alert-card .eff b { color: var(--brand); display: block; font-weight: 600; font-size: 13px; }
   .alert-card .eff span { display: block; margin-top: 2px; }
+  .alert-card .last { flex-shrink: 0; font-size: 12px; color: var(--ink-3); text-align: right; min-width: 90px; }
+  .alert-card .last b { color: var(--ink-2); display: block; font-weight: 500; }
+  .alert-card .last em { font-style: normal; color: var(--up); font-weight: 600; }
   .alert-card .ops { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
   .icon-btn { border: none; background: none; cursor: pointer; color: var(--ink-3); font-size: 14px; padding: 4px; border-radius: 6px; }
   .icon-btn:hover { background: var(--brand-soft); color: var(--brand); }
@@ -50,7 +51,7 @@
   .switch.on { background: var(--brand); opacity: 1; }
   .switch.on::after { left: 19px; }
 
-  /* 历史记录 */
+  /* 历史记录（示例数据） */
   .hist-item { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px dashed var(--card-border); font-size: 13px; }
   .hist-item:last-child { border-bottom: none; }
   .hist-item .t { color: var(--ink-3); font-size: 12px; flex-shrink: 0; width: 52px; }
@@ -62,7 +63,7 @@
   .hist-item .val .dd { color: var(--down); font-weight: 600; }
   .hist-item .st { flex-shrink: 0; font-size: 11px; color: var(--brand); background: var(--brand-soft); padding: 2px 8px; border-radius: 6px; }
 
-  /* 添加提醒弹层 */
+  /* 添加 / 编辑提醒弹层 */
   .modal-mask { position: fixed; inset: 0; background: rgba(15, 15, 20, .4); display: none; align-items: center; justify-content: center; z-index: 60; }
   .modal-mask.open { display: flex; }
   .modal { width: min(500px, 92vw); max-height: 86vh; overflow: auto; background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 20px 22px; box-shadow: 0 18px 50px rgba(0,0,0,.25); }
@@ -99,10 +100,16 @@
   .min-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 65; text-align: center; font-size: 15px; color: var(--ink-2); }
   .min-overlay small { display: block; margin-top: 6px; font-size: 12px; color: var(--ink-3); }
 
+  /* 空状态 / 演示说明行 */
+  .empty-card { text-align: center; padding: 40px 20px; }
+  .empty-card .btn { margin-top: 14px; }
+  .sim-line { font-size: 12px; color: var(--ink-3); margin-top: 8px; line-height: 1.6; }
+
   @media (max-width: 900px) {
     .alert-stats { grid-template-columns: repeat(2, 1fr); }
     .alert-card { flex-wrap: wrap; }
     .alert-card .cond { min-width: 100%; padding-left: 0; }
+    .alert-card .eff { text-align: left; }
     .alert-card .last { text-align: left; }
   }
   @media (max-width: 980px) { #closeDemoBtn { display: none; } } /* 窄窗口隐藏演示按钮，优先保导航 */
@@ -118,173 +125,69 @@
     <div class="topbar-right">
       <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
       <button id="closeDemoBtn" class="btn btn-ghost btn-sm">⏻ 演示关闭窗口</button>
-      <span>示例数据 · 非真实持仓</span>
+      <span>示例数据 · 非真实行情</span>
     </div>
   </div>
 </header>
 
 <main class="page">
   <div class="page-title">盯盘提醒</div>
-  <div class="page-sub">达到条件自动桌面弹窗提醒 · 指数/赛道盘中每 5 分钟检查 · 场外基金每日收盘后检查 · 同一提醒当天不重复</div>
+  <div class="page-sub">不用天天盯盘：设好条件交给小财通，达到条件才会弹窗通知你 · 同一提醒当天只提醒一次 · 指数/赛道盘中检查、场外基金收盘后检查（正式版规则）</div>
 
   <!-- 操作区 -->
   <div class="page-actions">
-    <button class="btn btn-sm">＋ 添加提醒</button>
-    <button class="btn btn-sm" id="testToastAlertBtn">🖥 网页通知预览</button>
+    <button class="btn btn-sm" id="addAlertBtn">＋ 添加提醒</button>
   </div>
 
   <!-- 系统提示条（通知询问结果等） -->
   <div class="history-note" id="sysNote" style="display:none;"></div>
 
-  <!-- 桌面通知总状态 + 盯盘提醒子开关（与市场事件页共用统一总状态） -->
+  <!-- 桌面通知总状态 + 盯盘提醒子开关（与市场事件页共用统一总状态，同一套记忆） -->
   <div class="ntf-bar" id="alertsNtfBar">
     <span class="nb-ico">🔔</span>
     <span class="nb-text"><b>桌面通知：已开启</b><span>盯盘提醒通知：已开启 · 与市场事件页共用统一总状态</span></span>
     <span class="switch" id="alertsSubSwitch"></span>
   </div>
 
-  <!-- 统计概览 -->
+  <!-- 统计概览（随列表操作实时变化，非写死数字） -->
   <div class="alert-stats">
-    <div class="item"><div class="l">生效中</div><div class="v">5</div><div class="s">指数 3 · 基金 2</div></div>
-    <div class="item"><div class="l">暂停</div><div class="v">2</div><div class="s">随时可恢复</div></div>
-    <div class="item"><div class="l">今日已触发</div><div class="v">1</div><div class="s">沪深300 涨破 4100</div></div>
-    <div class="item"><div class="l">桌面通知</div><div class="v">已开启</div><div class="s">默认开启 · 首次使用会询问是否保留</div></div>
+    <div class="item"><div class="l">生效中</div><div class="v" id="stAct">0</div><div class="s" id="stActSub">—</div></div>
+    <div class="item"><div class="l">计划中</div><div class="v" id="stPlan">0</div><div class="s" id="stPlanSub">—</div></div>
+    <div class="item"><div class="l">暂停</div><div class="v" id="stPause">0</div><div class="s">随时可恢复</div></div>
+    <div class="item"><div class="l">今日已触发</div><div class="v" id="stToday">0</div><div class="s" id="stTodaySub">—</div></div>
   </div>
 
-  <!-- 通知效果演示（高仿系统通知样式） -->
+  <!-- 触发与通知演示（模拟） -->
   <div class="card" style="margin-bottom:16px;">
-    <div class="card-title">🖥 网页通知效果预览（模拟） <span class="hint">只演示通知内容与排版 · 真实系统通知留待正式 App 阶段</span></div>
+    <div class="card-title">🔔 触发与通知演示（模拟） <span class="hint">模拟"条件达到 → 通知弹出 → 点击跳转"的完整链路 · 真实系统通知与后台监控留待正式 App 阶段</span></div>
     <div class="page-actions" style="margin-bottom:0; justify-content:flex-start;">
-      <button class="btn btn-ghost btn-sm" id="demoToastAlert">模拟：盯盘提醒通知</button>
-      <button class="btn btn-ghost btn-sm" id="demoToastNews">模拟：市场事件通知</button>
+      <button class="btn btn-ghost btn-sm" id="simTriggerBtn">⚡ 模拟触发一条提醒</button>
       <button class="btn btn-ghost btn-sm" id="resetDemoBtn">🔄 重置通知演示</button>
     </div>
+    <div class="sim-line" id="simTarget"></div>
   </div>
 
-  <!-- 提前设置（未来生效）演示 -->
-  <div class="group-title">提前设置 · 未来生效 <span class="cnt">1 条 · 今晚设置、明天起生效</span></div>
-
-  <div class="alert-card" id="futureDemo">
-    <div class="obj">
-      <div class="n">易方达蓝筹精选混合 <span class="tag tag-green">混合型</span></div>
-      <div class="d">005827 · 持有 · 最新净值 2.4378</div>
-    </div>
-    <div class="cond"><div class="c">📉 单日跌超 3%</div><div class="note">涨跌幅条件 · 收盘后检查</div></div>
-    <div class="eff"><b>下一交易日生效</b><span>有效期：仅下一交易日 · 系统自动计算</span><span>📝 达到止损条件，检查是否按原计划卖出</span></div>
-    <div class="last"><b>—</b>未触发</div>
-    <div class="ops">
-      <span class="switch on" data-on="1"></span>
-      <button class="icon-btn" title="编辑">✎</button>
-      <button class="icon-btn del" title="删除">✕</button>
-    </div>
-  </div>
+  <!-- 计划中（待生效）：设置了但还没到开始时间的提醒（如"仅下一交易日"今晚设置、明天才检查） -->
+  <div class="group-title" id="planHead">计划中 · 待生效 <span class="cnt" id="planCnt"></span></div>
+  <div id="planRows"></div>
 
   <!-- 我的基金提醒 -->
-  <div class="group-title" id="fundGroup">我的基金 <span class="cnt">3 条 · 每日收盘后检查净值</span></div>
-
-  <div class="alert-card">
-    <div class="obj">
-      <div class="n">易方达蓝筹精选混合 <span class="tag tag-green">混合型</span></div>
-      <div class="d">005827 · 持有 · 最新净值 2.4378</div>
-    </div>
-    <div class="cond"><div class="c">📉 单日跌超 3%</div><div class="note">涨跌幅条件 · 比昨日净值</div></div>
-    <div class="last"><b>08-26 20:08</b>上次触发</div>
-    <div class="ops">
-      <span class="switch on" data-on="1"></span>
-      <button class="icon-btn" title="编辑">✎</button>
-      <button class="icon-btn del" title="删除">✕</button>
-    </div>
-  </div>
-
-  <div class="alert-card">
-    <div class="obj">
-      <div class="n">中欧医疗健康混合A <span class="tag tag-green">混合型</span></div>
-      <div class="d">003095 · 持有 · 最新净值 1.5234</div>
-    </div>
-    <div class="cond"><div class="c">📈 单日涨超 5%</div><div class="note">涨跌幅条件 · 比昨日净值</div></div>
-    <div class="last"><b>08-24 20:10</b>上次触发</div>
-    <div class="ops">
-      <span class="switch" data-on="0"></span>
-      <button class="icon-btn" title="编辑">✎</button>
-      <button class="icon-btn del" title="删除">✕</button>
-    </div>
-  </div>
-
-  <div class="alert-card">
-    <div class="obj">
-      <div class="n">招商中证白酒指数A <span class="tag tag-blue">指数型</span></div>
-      <div class="d">161725 · 持有 · 最新净值 0.9826</div>
-    </div>
-    <div class="cond"><div class="c">🎯 净值跌破 0.95 元</div><div class="note">数值线条件 · 盯净值点位</div></div>
-    <div class="last"><b>—</b>未触发过</div>
-    <div class="ops">
-      <span class="switch on" data-on="1"></span>
-      <button class="icon-btn" title="编辑">✎</button>
-      <button class="icon-btn del" title="删除">✕</button>
-    </div>
-  </div>
+  <div class="group-title" id="fundHead">我的基金 <span class="cnt" id="fundCnt"></span></div>
+  <div id="fundRows"></div>
 
   <!-- 指数 / 赛道提醒 -->
-  <div class="group-title" id="mktGroup">指数 / 赛道 <span class="cnt">4 条 · 交易时段内每 5 分钟检查</span></div>
+  <div class="group-title" id="mktHead">指数 / 赛道 <span class="cnt" id="mktCnt"></span></div>
+  <div id="mktRows"></div>
 
-  <div class="alert-card" id="alertHs300">
-    <div class="obj">
-      <div class="n">沪深300 <span class="tag tag-blue">指数</span></div>
-      <div class="d">现价 4,126.58 · +0.62%</div>
-    </div>
-    <div class="cond"><div class="c">🎯 涨破 4100 点</div><div class="note">数值线条件 · 盘中点位</div></div>
-    <div class="last"><b>今日 15:00</b>已触发 ✔</div>
-    <div class="ops">
-      <span class="switch on" data-on="1"></span>
-      <button class="icon-btn" title="编辑">✎</button>
-      <button class="icon-btn del" title="删除">✕</button>
-    </div>
+  <!-- 全部为空时 -->
+  <div class="card empty-card" id="emptyAll" style="display:none;">
+    <div>还没有任何提醒。</div>
+    <div style="font-size:12px; color:var(--ink-3); margin-top:6px;">设好条件后，达到条件小财通才会通知你——不用每天打开软件确认。</div>
+    <button class="btn btn-sm" id="emptyAddBtn">＋ 添加提醒</button>
   </div>
 
-  <div class="alert-card">
-    <div class="obj">
-      <div class="n">纳斯达克100 <span class="tag tag-blue">指数</span></div>
-      <div class="d">现价 21,450.88 · +0.72%</div>
-    </div>
-    <div class="cond"><div class="c">📈 单日涨超 2%</div><div class="note">涨跌幅条件 · 比昨日收盘</div></div>
-    <div class="last"><b>08-27 23:05</b>上次触发</div>
-    <div class="ops">
-      <span class="switch on" data-on="1"></span>
-      <button class="icon-btn" title="编辑">✎</button>
-      <button class="icon-btn del" title="删除">✕</button>
-    </div>
-  </div>
-
-  <div class="alert-card">
-    <div class="obj">
-      <div class="n">黄金 <span class="tag tag-blue">赛道</span></div>
-      <div class="d">现价 576.20 元/克 · +0.35%</div>
-    </div>
-    <div class="cond"><div class="c">📉 单日跌超 1%</div><div class="note">涨跌幅条件 · 比昨日收盘</div></div>
-    <div class="last"><b>—</b>未触发过</div>
-    <div class="ops">
-      <span class="switch on" data-on="1"></span>
-      <button class="icon-btn" title="编辑">✎</button>
-      <button class="icon-btn del" title="删除">✕</button>
-    </div>
-  </div>
-
-  <div class="alert-card">
-    <div class="obj">
-      <div class="n">半导体 <span class="tag tag-blue">赛道</span></div>
-      <div class="d">关注赛道 · 当前 +1.2%</div>
-    </div>
-    <div class="cond"><div class="c">📈 单日涨超 3%</div><div class="note">涨跌幅条件 · 比昨日收盘</div></div>
-    <div class="last"><b>—</b>未触发过</div>
-    <div class="ops">
-      <span class="switch" data-on="0"></span>
-      <button class="icon-btn" title="编辑">✎</button>
-      <button class="icon-btn del" title="删除">✕</button>
-    </div>
-  </div>
-
-  <!-- 历史触发记录 -->
-  <div class="group-title">历史触发记录 <span class="cnt">最近 30 天 · 共 12 次</span></div>
+  <!-- 历史触发记录（示例数据） -->
+  <div class="group-title">历史触发记录 <span class="cnt">最近 30 天 · 共 12 次 · 示例数据（正式版每次触发自动记录在此）</span></div>
   <div class="card">
     <div class="hist-item">
       <div class="t">今日</div>
@@ -312,29 +215,20 @@
     </div>
   </div>
 
-  <!-- 添加提醒弹层 -->
+  <!-- 添加 / 编辑提醒弹层 -->
   <div class="modal-mask" id="addModal">
     <div class="modal">
-      <h3>＋ 添加提醒</h3>
-      <div class="m-sub">达到条件后桌面弹窗通知 · 同一提醒当天只弹一次</div>
+      <h3 id="formTitle">＋ 添加提醒</h3>
+      <div class="m-sub" id="formSub">达到条件后桌面弹窗通知 · 同一提醒当天只弹一次</div>
 
       <div class="m-sec">① 选对象</div>
       <div class="seg" id="objTab">
         <button class="seg-btn active" data-tab="mkt">指数 / 赛道</button>
         <button class="seg-btn" data-tab="fund">我的基金</button>
       </div>
-      <div class="opt-list" id="mktList" style="margin-top:8px;">
-        <div class="opt">沪深300</div><div class="opt">上证指数</div><div class="opt">中证500</div>
-        <div class="opt">创业板指</div><div class="opt">恒生指数</div><div class="opt">恒生科技</div>
-        <div class="opt">纳斯达克100</div><div class="opt">标普500</div><div class="opt">黄金</div>
-        <div class="opt">半导体</div><div class="opt">人工智能</div><div class="opt">创新药</div>
-        <div class="opt">白酒</div><div class="opt">新能源</div><div class="opt">医药生物</div><div class="opt">红利低波</div>
-      </div>
-      <div class="opt-list" id="fundList" style="margin-top:8px; display:none;">
-        <div class="opt">易方达蓝筹精选混合</div><div class="opt">中欧医疗健康混合A</div>
-        <div class="opt">招商中证白酒指数A</div><div class="opt">天弘沪深300ETF联接A</div>
-        <div class="opt">易方达中证海外50ETF联接A</div>
-      </div>
+      <div class="opt-list" id="mktList" style="margin-top:8px;"></div>
+      <div class="opt-list" id="fundList" style="margin-top:8px; display:none;"></div>
+      <div class="freq-note" id="selInfo" style="display:none;"></div>
 
       <div class="m-sec">② 设条件</div>
       <div class="seg" id="condTab">
@@ -342,11 +236,10 @@
         <button class="seg-btn" data-cond="line">数值线 · 涨破/跌破点位</button>
       </div>
       <div class="cond-row" style="margin-top:10px;">
-        <span id="dirText">比昨日收盘</span>
         <select id="dirSel" class="num-in" style="width:auto;">
           <option>涨超</option><option>跌超</option>
         </select>
-        <input class="num-in" id="numIn" type="number" value="2.0" step="0.1">
+        <input class="num-in" id="numIn" type="number" min="0" step="0.01" placeholder="如 2.0">
         <span id="unitText">%</span>
       </div>
 
@@ -361,7 +254,7 @@
       <div class="freq-note" id="validDesc" style="margin-top:8px;">点击上方选项查看说明</div>
       <div class="cond-row" id="dateRow" style="margin-top:8px; display:none;">
         <span>开始</span><input class="num-in" id="dateFrom" type="date" style="width:auto;">
-        <span>结束</span><input class="num-in" id="dateTo" type="date" style="width:auto;">
+        <span id="dateToLabel">结束</span><input class="num-in" id="dateTo" type="date" style="width:auto;">
       </div>
 
       <div class="m-sec">④ 备注（选填）</div>
@@ -395,7 +288,7 @@
   <div class="modal-mask" id="exitModal">
     <div class="modal">
       <h3>确认退出？</h3>
-      <div class="m-sub" id="exitSub">你有 3 条生效中的提醒，退出后这些提醒将停止。</div>
+      <div class="m-sub" id="exitSub">你有生效中的提醒，退出后这些提醒将停止。</div>
       <div class="m-foot">
         <button class="btn btn-ghost btn-sm" id="exitCancelBtn">取消</button>
         <button class="btn btn-sm" id="exitOkBtn">继续退出</button>
@@ -443,7 +336,7 @@
     </div>
   </div>
 
-  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。「＋ 添加提醒」可打开面板演示完整流程：选对象 → 设条件 → 有效期快捷选项 → 备注 → 保存。「提前设置 · 未来生效」分组是新增需求演示。<b>本页已定稿（2026-08-29）</b>：有效期方案已确认（仅下一交易日/持续到触发/自定义时间范围，底层统一为起止日期）；备注仅你自己可见，小财通不解读、不构成建议、不代为买卖。外观方案与响应式布局已确认（2026-08-29）。<b>新增后台运行演示（2026-08-30，需求见产品规划第 22 节）</b>：首次保存提醒后询问「登录时自动启动」；顶栏「⏻ 演示关闭窗口」体验关闭提示（可记住选择）、最小化到后台（托盘菜单：打开主界面 / 暂停所有提醒 / 退出）与退出二次确认。「🖥 网页通知效果预览」卡片只模拟网页内的通知样式（真实 Windows/macOS 系统通知留待正式 App 阶段）；桌面通知默认开启，首次创建提醒时主动询问是否保留；顶部通知状态条与市场事件页共用统一总状态。</div>
+  <div class="demo-note">✓ 网页原型（2026-09-03 重构版，待验收；页面内容为<b>示例数据</b>，非真实行情/持仓）。本页回答：设好条件、达到才通知、不用天天盯盘。<b>真正可操作</b>：添加（选对象 → 设条件 → 选有效期 → 备注 → 保存）/ 编辑（✎ 回填修改）/ 暂停与恢复（每行开关）/ 删除；顶部统计与分组数量随操作实时变化；「⚡ 模拟触发一条提醒」演示完整链路：条件达到 → 通知弹出 → 点击通知跳转该提醒并标记「今日已触发」→ 当天不再重复。<b>示例数据</b>：提醒清单、行情数字、历史触发记录均为演示用示例（基金与「我的基金」页演示持仓一致）。<b>共用状态</b>：通知开关与市场事件页共用同一套记忆——本页关掉总通知，市场事件页同步生效（反之亦然），首次使用询问是否保留；关闭窗口/托盘/开机自启为网页模拟演示。<b>等正式 App</b>：真实行情检查（指数盘中每 5 分钟、场外基金收盘后检查净值）、真实系统通知、开机自启与托盘后台、点击通知跳转、历史记录自动留存。</div>
 </main>
 
 <script src="nav.js"></script>
@@ -451,255 +344,565 @@
 <script src="toast.js"></script>
 <script>
 (function () {
-  var modal = document.getElementById('addModal');
-  var addBtn = document.querySelector('.page-actions .btn');
+  'use strict';
 
-  /* ---------- 添加提醒弹层 ---------- */
-  addBtn.addEventListener('click', function () { modal.classList.add('open'); });
-  document.getElementById('cancelBtn').addEventListener('click', function () { modal.classList.remove('open'); });
-  modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('open'); });
+  /* ==========================================================
+     1. 数据模型：本页所有提醒共用一份数据，界面由它渲染。
+        页面为原型，提醒清单是示例数据，不存 localStorage（刷新恢复示例）；
+        但"通知开关"与市场事件页共用 xltc-notify-* 一套记忆（真正跨页复用）。
+     ========================================================== */
+  var nextId = 1;
 
-  /* 对象 tab */
-  var mktList = document.getElementById('mktList'), fundList = document.getElementById('fundList');
-  document.getElementById('objTab').addEventListener('click', function (e) {
-    var b = e.target.closest('.seg-btn'); if (!b) return;
-    document.querySelectorAll('#objTab .seg-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
-    mktList.style.display = b.dataset.tab === 'mkt' ? '' : 'none';
-    fundList.style.display = b.dataset.tab === 'fund' ? '' : 'none';
-    setFreq();
-  });
+  /* 与「我的基金」页演示持仓一致的基金清单（示例数据：代码/类型对齐） */
+  var FUNDS = [
+    { code: '005827', name: '易方达蓝筹精选混合', tagCls: 'tag-green', tagTxt: '混合型' },
+    { code: '003095', name: '中欧医疗健康混合A', tagCls: 'tag-green', tagTxt: '混合型' },
+    { code: '161725', name: '招商中证白酒指数A', tagCls: 'tag-blue', tagTxt: '指数型' },
+    { code: '000961', name: '天弘沪深300ETF联接A', tagCls: 'tag-blue', tagTxt: '指数型' },
+    { code: '006327', name: '易方达中证海外50ETF联接A', tagCls: 'tag-blue', tagTxt: 'QDII' }
+  ];
+  /* 预设指数 / 赛道清单 */
+  var MKTS = [
+    { n: '沪深300', t: '指数' }, { n: '上证指数', t: '指数' }, { n: '中证500', t: '指数' }, { n: '创业板指', t: '指数' },
+    { n: '恒生指数', t: '指数' }, { n: '恒生科技', t: '指数' }, { n: '纳斯达克100', t: '指数' }, { n: '标普500', t: '指数' },
+    { n: '黄金', t: '赛道' }, { n: '半导体', t: '赛道' }, { n: '人工智能', t: '赛道' }, { n: '创新药', t: '赛道' },
+    { n: '白酒', t: '赛道' }, { n: '新能源', t: '赛道' }, { n: '医药生物', t: '赛道' }, { n: '红利低波', t: '赛道' }
+  ];
+
+  /* 初始示例提醒（演示形态；lastKind: never 未触发 / hist 上次触发 / today 今日已触发） */
+  var ALERTS = [
+    { id: nextId++, zone: 'plan', objType: 'fund', objCode: '000961',
+      name: '天弘沪深300ETF联接A', sub: '000961 · 我的基金持仓（示例）', tagCls: 'tag-blue', tagTxt: '指数型',
+      condIcon: '📉', condCore: '单日跌超 2%', condNote: '涨跌幅条件 · 收盘后检查净值',
+      effMain: '下一交易日生效', effSub: '有效期：仅下一交易日 · 系统自动计算',
+      note: '宽基连续下跌时提醒自己关注市场发生了什么（示例备注）',
+      lastKind: 'never', lastTime: '', on: true,
+      back: { objType: 'fund', objCode: '000961', condType: 'pct', dir: '跌超', num: '2', validType: 'once', dateFrom: '', dateTo: '', note: '宽基连续下跌时提醒自己关注市场发生了什么（示例备注）' } },
+    { id: nextId++, zone: 'fund', objType: 'fund', objCode: '005827',
+      name: '易方达蓝筹精选混合', sub: '005827 · 持有 · 最新净值 2.4378（示例）', tagCls: 'tag-green', tagTxt: '混合型',
+      condIcon: '📉', condCore: '单日跌超 3%', condNote: '涨跌幅条件 · 比昨日净值',
+      effMain: '持续到触发', effSub: '触发后自动失效',
+      note: '达到自己的止损条件，检查是否按原计划卖出（示例备注）',
+      lastKind: 'hist', lastTime: '08-26 20:08', on: true,
+      back: { objType: 'fund', objCode: '005827', condType: 'pct', dir: '跌超', num: '3', validType: 'forever', dateFrom: '', dateTo: '', note: '达到自己的止损条件，检查是否按原计划卖出（示例备注）' } },
+    { id: nextId++, zone: 'fund', objType: 'fund', objCode: '003095',
+      name: '中欧医疗健康混合A', sub: '003095 · 持有 · 最新净值 1.5234（示例）', tagCls: 'tag-green', tagTxt: '混合型',
+      condIcon: '📈', condCore: '单日涨超 5%', condNote: '涨跌幅条件 · 比昨日净值',
+      effMain: '持续到触发', effSub: '触发后自动失效',
+      note: '',
+      lastKind: 'hist', lastTime: '08-24 20:10', on: false,
+      back: { objType: 'fund', objCode: '003095', condType: 'pct', dir: '涨超', num: '5', validType: 'forever', dateFrom: '', dateTo: '', note: '' } },
+    { id: nextId++, zone: 'fund', objType: 'fund', objCode: '161725',
+      name: '招商中证白酒指数A', sub: '161725 · 持有 · 最新净值 0.9826（示例）', tagCls: 'tag-blue', tagTxt: '指数型',
+      condIcon: '🎯', condCore: '净值跌破 0.95 元', condNote: '数值线条件 · 盯净值点位',
+      effMain: '持续到触发', effSub: '触发后自动失效',
+      note: '',
+      lastKind: 'never', lastTime: '', on: true,
+      back: { objType: 'fund', objCode: '161725', condType: 'line', dir: '跌破', num: '0.95', validType: 'forever', dateFrom: '', dateTo: '', note: '' } },
+    { id: nextId++, zone: 'mkt', objType: 'mkt', objName: '沪深300',
+      name: '沪深300', sub: '现价 4,126.58 · +0.62%（示例）', tagCls: 'tag-blue', tagTxt: '指数',
+      condIcon: '🎯', condCore: '涨破 4100 点', condNote: '数值线条件 · 盘中点位',
+      effMain: '持续到触发', effSub: '今日已触发，明天起重新检查（当天不重复弹窗）',
+      note: '',
+      lastKind: 'today', lastTime: '今日 15:00', on: true,
+      back: { objType: 'mkt', objName: '沪深300', condType: 'line', dir: '涨破', num: '4100', validType: 'forever', dateFrom: '', dateTo: '', note: '' } },
+    { id: nextId++, zone: 'mkt', objType: 'mkt', objName: '纳斯达克100',
+      name: '纳斯达克100', sub: '现价 21,450.88 · +0.72%（示例）', tagCls: 'tag-blue', tagTxt: '指数',
+      condIcon: '📈', condCore: '单日涨超 2%', condNote: '涨跌幅条件 · 比昨日收盘',
+      effMain: '持续到触发', effSub: '触发后自动失效',
+      note: '',
+      lastKind: 'hist', lastTime: '08-27 23:05', on: true,
+      back: { objType: 'mkt', objName: '纳斯达克100', condType: 'pct', dir: '涨超', num: '2', validType: 'forever', dateFrom: '', dateTo: '', note: '' } },
+    { id: nextId++, zone: 'mkt', objType: 'mkt', objName: '黄金',
+      name: '黄金', sub: '现价 576.20 元/克 · +0.35%（示例）', tagCls: 'tag-blue', tagTxt: '赛道',
+      condIcon: '📉', condCore: '单日跌超 1%', condNote: '涨跌幅条件 · 比昨日收盘',
+      effMain: '持续到触发', effSub: '触发后自动失效',
+      note: '',
+      lastKind: 'never', lastTime: '', on: true,
+      back: { objType: 'mkt', objName: '黄金', condType: 'pct', dir: '跌超', num: '1', validType: 'forever', dateFrom: '', dateTo: '', note: '' } },
+    { id: nextId++, zone: 'mkt', objType: 'mkt', objName: '半导体',
+      name: '半导体', sub: '关注赛道 · 当前 +1.2%（示例）', tagCls: 'tag-blue', tagTxt: '赛道',
+      condIcon: '📈', condCore: '单日涨超 3%', condNote: '涨跌幅条件 · 比昨日收盘',
+      effMain: '持续到触发', effSub: '触发后自动失效',
+      note: '',
+      lastKind: 'never', lastTime: '', on: false,
+      back: { objType: 'mkt', objName: '半导体', condType: 'pct', dir: '涨超', num: '3', validType: 'forever', dateFrom: '', dateTo: '', note: '' } }
+  ];
+
+  function findAlert (id) {
+    for (var i = 0; i < ALERTS.length; i++) if (ALERTS[i].id === id) return ALERTS[i];
+    return null;
+  }
+
+  /* ==========================================================
+     2. 渲染：列表行 / 分组标题 / 顶部统计 / 空状态 / 演示候选行
+     ========================================================== */
+  function rowHtml (r) {
+    var paused = r.on ? '' : ' paused';
+    var lastHtml;
+    if (r.lastKind === 'today') lastHtml = '<b>' + r.lastTime + '</b><em>已触发 ✔</em>';
+    else if (r.lastKind === 'hist') lastHtml = '<b>' + r.lastTime + '</b>上次触发';
+    else lastHtml = '<b>—</b>未触发过';
+    return '<div class="alert-card' + paused + '" data-id="' + r.id + '">' +
+      '<div class="obj"><div class="n">' + r.name + ' <span class="tag ' + r.tagCls + '">' + r.tagTxt + '</span></div>' +
+      '<div class="d">' + r.sub + '</div></div>' +
+      '<div class="cond"><div class="c">' + r.condIcon + ' ' + r.condCore + '</div>' +
+      '<div class="note">' + r.condNote + '</div></div>' +
+      '<div class="eff"><b>' + r.effMain + '</b><span>' + r.effSub + '</span>' +
+      (r.note ? '<span>📝 ' + r.note + '</span>' : '') + '</div>' +
+      '<div class="last">' + lastHtml + '</div>' +
+      '<div class="ops"><span class="switch' + (r.on ? ' on' : '') + '" data-on="' + (r.on ? 1 : 0) +
+      '" title="' + (r.on ? '点击暂停' : '点击恢复') + '"></span>' +
+      '<button class="icon-btn" data-act="edit" title="编辑">✎</button>' +
+      '<button class="icon-btn del" data-act="del" title="删除">✕</button></div></div>';
+  }
+
+  function renderZone (zone, headId, rowsId) {
+    var list = ALERTS.filter(function (r) { return r.zone === zone; });
+    var head = document.getElementById(headId);
+    var rows = document.getElementById(rowsId);
+    if (!list.length) { head.style.display = 'none'; rows.style.display = 'none'; return; }
+    head.style.display = '';
+    rows.style.display = '';
+    rows.innerHTML = list.map(rowHtml).join('');
+  }
+
+  function zoneOnCount (zone) {
+    var n = 0;
+    ALERTS.forEach(function (r) { if (r.zone === zone && r.on) n++; });
+    return n;
+  }
+
+  function renderCents () {
+    var plan = ALERTS.filter(function (r) { return r.zone === 'plan'; });
+    var fund = ALERTS.filter(function (r) { return r.zone === 'fund'; });
+    var mkt = ALERTS.filter(function (r) { return r.zone === 'mkt'; });
+    var f1 = ALERTS.filter(function (r) { return r.zone === 'fund' && r.on; }).length;
+    var m1 = ALERTS.filter(function (r) { return r.zone === 'mkt' && r.on; }).length;
+    document.getElementById('planCnt').textContent = plan.length + ' 条 · 到生效时间自动开始检查';
+    document.getElementById('fundCnt').textContent = fund.length + ' 条 · ' + f1 + ' 生效 · 每日收盘后检查净值';
+    document.getElementById('mktCnt').textContent = mkt.length + ' 条 · ' + m1 + ' 生效 · 交易时段内每 5 分钟检查';
+  }
+
+  function renderStats () {
+    var active = ALERTS.filter(function (r) { return r.zone !== 'plan' && r.on; });
+    var planned = ALERTS.filter(function (r) { return r.zone === 'plan' && r.on; });
+    var paused = ALERTS.filter(function (r) { return !r.on; });
+    var today = ALERTS.filter(function (r) { return r.lastKind === 'today'; });
+    var mktOn = 0, fundOn = 0;
+    active.forEach(function (r) { if (r.zone === 'mkt') mktOn++; else fundOn++; });
+    document.getElementById('stAct').textContent = active.length;
+    document.getElementById('stActSub').textContent = active.length ? ('指数 ' + mktOn + ' · 基金 ' + fundOn) : '还没有生效的提醒';
+    document.getElementById('stPlan').textContent = planned.length;
+    document.getElementById('stPlanSub').textContent = planned.length ? '等待开始检查行情' : '暂无';
+    document.getElementById('stPause').textContent = paused.length;
+    document.getElementById('stToday').textContent = today.length;
+    document.getElementById('stTodaySub').textContent = today.length
+      ? today[0].name + ' ' + today[0].condCore + ' · 当天不重复' : '今天还没有触发的提醒';
+  }
+
+  function renderAll () {
+    renderZone('plan', 'planHead', 'planRows');
+    renderZone('fund', 'fundHead', 'fundRows');
+    renderZone('mkt', 'mktHead', 'mktRows');
+    document.getElementById('emptyAll').style.display = ALERTS.length ? 'none' : '';
+    renderCents();
+    renderStats();
+    refreshSim();
+  }
+
+  /* ==========================================================
+     3. 添加 / 编辑提醒弹层（mode: add / edit，编辑回填本人之前的设置）
+     ========================================================== */
+  var addModal = document.getElementById('addModal');
+  var mode = 'add', editId = null;
+  var curValid = '';
+
+  function buildOptLists () {
+    var mkt = document.getElementById('mktList'), fund = document.getElementById('fundList');
+    MKTS.forEach(function (m) {
+      var o = document.createElement('div');
+      o.className = 'opt';
+      o.dataset.objType = 'mkt'; o.dataset.name = m.n; o.dataset.tag = m.t;
+      o.textContent = m.n;
+      mkt.appendChild(o);
+    });
+    FUNDS.forEach(function (f) {
+      var o = document.createElement('div');
+      o.className = 'opt';
+      o.dataset.objType = 'fund'; o.dataset.code = f.code; o.dataset.tagTxt = f.tagTxt;
+      o.textContent = f.name;
+      fund.appendChild(o);
+    });
+  }
+
+  function clearOptSel (list) {
+    Array.prototype.forEach.call(list.querySelectorAll('.opt'), function (x) { x.classList.remove('sel'); });
+  }
+  function pickOpt (list, selCls) {
+    var el = null;
+    Array.prototype.forEach.call(list.querySelectorAll('.opt'), function (x) {
+      var hit = selCls(x);
+      if (hit) { x.classList.add('sel'); el = x; }
+    });
+    return el;
+  }
+  function showSelInfo (text) {
+    var info = document.getElementById('selInfo');
+    info.style.display = text ? '' : 'none';
+    info.textContent = text ? '已选：' + text : '';
+  }
+
+  function isFundMode () { return document.getElementById('fundList').style.display !== 'none'; }
+
   function setFreq () {
-    var isFund = fundList.style.display !== 'none';
-    document.getElementById('freqNote').innerHTML = isFund
+    document.getElementById('freqNote').innerHTML = isFundMode()
       ? '场外基金：每日收盘后检查一次（盘中无实时估值）'
       : '指数 / 赛道：交易时段内每 5 分钟检查一次<br>场外基金：每日收盘后检查一次（盘中无实时估值）';
   }
-  function bindOpts (list) {
-    list.addEventListener('click', function (e) {
-      var o = e.target.closest('.opt'); if (!o) return;
-      list.querySelectorAll('.opt').forEach(function (x) { x.classList.remove('sel'); });
-      o.classList.add('sel');
-    });
-  }
-  bindOpts(mktList); bindOpts(fundList);
 
-  /* 条件类型 */
-  document.getElementById('condTab').addEventListener('click', function (e) {
-    var b = e.target.closest('.seg-btn'); if (!b) return;
-    document.querySelectorAll('#condTab .seg-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
-    var isLine = b.dataset.cond === 'line';
-    document.getElementById('dirText').textContent = isLine ? '点位' : '比昨日收盘';
+  /* 单位与占位符随 条件类型 + 对象类型 变化：基金数值线盯"净值（元）"，指数数值线盯"点数" */
+  function refreshCondUI () {
+    var isLine = document.querySelector('#condTab .seg-btn.active').dataset.cond === 'line';
+    var isFund = isFundMode();
     document.getElementById('dirSel').innerHTML = isLine
       ? '<option>涨破</option><option>跌破</option>'
       : '<option>涨超</option><option>跌超</option>';
-    document.getElementById('unitText').textContent = isLine ? '点' : '%';
-    document.getElementById('numIn').value = isLine ? '4100' : '2.0';
-  });
-
-  /* ---------- 开关 ---------- */
-  function toggleSw () {
-    var on = this.classList.toggle('on');
-    this.dataset.on = on ? '1' : '0';
-    var card = this.closest('.alert-card');
-    card.classList.toggle('paused', !on);
+    var unit = isLine ? (isFund ? '元' : '点') : '%';
+    document.getElementById('unitText').textContent = unit;
+    document.getElementById('numIn').placeholder = isLine ? (isFund ? '如 0.95' : '如 4100') : '如 2.0';
   }
-  document.querySelectorAll('.switch').forEach(function (sw) { sw.addEventListener('click', toggleSw); });
 
-  /* ---------- 删除（演示） ---------- */
-  function delRow () {
-    var card = this.closest('.alert-card');
-    if (confirm('删除这条提醒？')) card.remove();
+  function resetForm () {
+    mode = 'add'; editId = null;
+    document.getElementById('formTitle').textContent = '＋ 添加提醒';
+    document.getElementById('formSub').textContent = '达到条件后桌面弹窗通知 · 同一提醒当天只弹一次';
+    /* 对象：不替你选，需要你点选（tab 只决定看哪份清单） */
+    clearOptSel(document.getElementById('mktList'));
+    clearOptSel(document.getElementById('fundList'));
+    showSelInfo('');
+    /* 条件：不预填数值，类型 tab 只是当前编辑视图 */
+    var condBtns = document.querySelectorAll('#condTab .seg-btn');
+    condBtns.forEach(function (x) { x.classList.toggle('active', x === condBtns[0]); });
+    document.getElementById('numIn').value = '';
+    /* 有效期：不预选，三个快捷选项默认都不亮 */
+    document.querySelectorAll('#validTab .seg-btn').forEach(function (x) { x.classList.remove('active'); });
+    curValid = '';
+    document.getElementById('validDesc').textContent = '点击上方选项查看说明';
+    resetDateRow();
+    document.getElementById('noteIn').value = '';
+    refreshCondUI();
   }
-  document.querySelectorAll('.icon-btn.del').forEach(function (b) { b.addEventListener('click', delRow); });
 
-  /* ---------- 有效期（3 个快捷选项 · 底层按起止日期统一处理） ---------- */
+  function openForm () {
+    resetForm();
+    addModal.classList.add('open');
+  }
+
+  function resetDateRow () {
+    var row = document.getElementById('dateRow');
+    row.style.display = 'none';
+    document.getElementById('dateTo').style.display = '';
+    document.getElementById('dateToLabel').style.display = '';
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+  }
+
+  function openEdit (id) {
+    var a = findAlert(id);
+    if (!a) return;
+    mode = 'edit'; editId = id;
+    document.getElementById('formTitle').textContent = '✎ 编辑提醒';
+    document.getElementById('formSub').textContent = '修改后立即更新列表 · 有效期、条件、对象均可改';
+    /* 对象 tab + 选中当前对象 */
+    var tabFund = a.objType === 'fund';
+    document.querySelectorAll('#objTab .seg-btn').forEach(function (x) {
+      x.classList.toggle('active', (x.dataset.tab === 'fund') === tabFund);
+    });
+    document.getElementById('mktList').style.display = tabFund ? 'none' : '';
+    document.getElementById('fundList').style.display = tabFund ? '' : 'none';
+    setFreq();
+    if (tabFund) {
+      var fEl = pickOpt(document.getElementById('fundList'), function (x) { return x.dataset.code === a.objCode; });
+      showSelInfo(fEl ? FUNDS.filter(function (f) { return f.code === a.objCode; })[0].name : '');
+    } else {
+      var mEl = pickOpt(document.getElementById('mktList'), function (x) { return x.dataset.name === a.objName; });
+      showSelInfo(mEl ? mEl.dataset.name + '（' + mEl.dataset.tag + '）' : '');
+    }
+    /* 条件回填 */
+    document.querySelectorAll('#condTab .seg-btn').forEach(function (x) {
+      x.classList.toggle('active', x.dataset.cond === a.back.condType);
+    });
+    refreshCondUI();
+    document.getElementById('dirSel').value = a.back.dir;
+    document.getElementById('numIn').value = a.back.num;
+    /* 有效期回填 */
+    curValid = a.back.validType;
+    document.querySelectorAll('#validTab .seg-btn').forEach(function (x) {
+      x.classList.toggle('active', x.dataset.valid === curValid);
+    });
+    document.getElementById('validDesc').textContent = VALID_DESC[curValid];
+    resetDateRow();
+    if (curValid === 'forever' || curValid === 'range') {
+      document.getElementById('dateRow').style.display = '';
+      if (curValid === 'forever') {
+        document.getElementById('dateTo').style.display = 'none';
+        document.getElementById('dateToLabel').style.display = 'none';
+      }
+      document.getElementById('dateFrom').value = a.back.dateFrom || '';
+      document.getElementById('dateTo').value = a.back.dateTo || '';
+    }
+    document.getElementById('noteIn').value = a.back.note || '';
+    addModal.classList.add('open');
+  }
+
   var VALID_DESC = {
     once:    '仅下一交易日：系统自动计算下一个实际交易日（如周五设置 → 下周一生效），无需填日期。当天检查结束后自动失效。',
     forever: '持续到触发：从今天（或你选的开始日期）起一直监控，触发一次后自动失效。',
     range:   '自定义时间范围：填开始和结束日期，范围内每天检查，到期自动失效。'
   };
-  var curValid = '';
-  var validBtns = document.querySelectorAll('#validTab .seg-btn');
-  var dateRow = document.getElementById('dateRow');
-  var dateFrom = document.getElementById('dateFrom');
-  var dateTo = document.getElementById('dateTo');
-  validBtns.forEach(function (b) {
-    b.addEventListener('click', function () {
-      validBtns.forEach(function (x) { x.classList.toggle('active', x === b); });
-      curValid = b.dataset.valid;
-      document.getElementById('validDesc').textContent = VALID_DESC[curValid];
-      if (curValid === 'once') {
-        dateRow.style.display = 'none';
-      } else if (curValid === 'forever') {
-        dateRow.style.display = '';
-        dateTo.style.display = 'none';
-        dateRow.querySelector('span:nth-child(3)').style.display = 'none';
-      } else {
-        dateRow.style.display = '';
-        dateTo.style.display = '';
-        dateRow.querySelector('span:nth-child(3)').style.display = '';
+
+  function todayStr () {
+    var d = new Date();
+    function p (x) { return x < 10 ? '0' + x : '' + x; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  /* 由表单构造一条提醒：对象 → 条件 → 有效期 → 分区（计划中 / 我的基金 / 指数赛道） */
+  function buildAlert (f) {
+    var fund = null;
+    for (var i = 0; i < FUNDS.length; i++) if (FUNDS[i].code === f.objCode) fund = FUNDS[i];
+    var mkt = null;
+    for (var j = 0; j < MKTS.length; j++) if (MKTS[j].n === f.objName) mkt = MKTS[j];
+    var name, sub, tagCls, tagTxt;
+    var unit = '%';
+    if (f.objType === 'fund') {
+      name = fund.name; tagCls = fund.tagCls; tagTxt = fund.tagTxt;
+      sub = fund.code + ' · 我的基金持仓（示例）';
+      unit = f.condType === 'line' ? '元' : '%';
+    } else {
+      name = mkt.n; tagCls = 'tag-blue'; tagTxt = mkt.t;
+      sub = '预设清单 · ' + mkt.t + '（示例）';
+      unit = f.condType === 'line' ? '点' : '%';
+    }
+    var condIcon, condCore, condNote;
+    if (f.condType === 'pct') {
+      var up = f.dir.indexOf('涨') === 0;
+      condIcon = up ? '📈' : '📉';
+      condCore = '单日' + f.dir + ' ' + f.num + '%';
+      condNote = f.objType === 'fund' ? '涨跌幅条件 · 收盘后检查净值' : '涨跌幅条件 · 比昨日收盘';
+    } else {
+      condIcon = '🎯';
+      condCore = f.dir + ' ' + f.num + ' ' + unit;
+      condNote = f.objType === 'fund' ? '数值线条件 · 盯净值点位' : '数值线条件 · 盘中点位';
+    }
+    var effMain, effSub, zone;
+    var future = f.dateFrom && f.dateFrom > todayStr();
+    if (f.validType === 'once') {
+      effMain = '下一交易日生效'; effSub = '有效期：仅下一交易日 · 系统自动计算';
+      zone = 'plan';
+    } else if (f.validType === 'forever') {
+      effMain = future ? '从 ' + f.dateFrom + ' 起' : '立即生效';
+      effSub = '有效期：持续到触发 · 触发后自动失效';
+      zone = future ? 'plan' : (f.objType === 'fund' ? 'fund' : 'mkt');
+    } else {
+      effMain = '从 ' + f.dateFrom + ' 起';
+      effSub = '有效期：' + f.dateFrom + ' ~ ' + f.dateTo;
+      zone = future ? 'plan' : (f.objType === 'fund' ? 'fund' : 'mkt');
+    }
+    return {
+      id: 0, zone: zone, objType: f.objType, objCode: f.objCode, objName: f.objName,
+      name: name, sub: sub, tagCls: tagCls, tagTxt: tagTxt,
+      condIcon: condIcon, condCore: condCore, condNote: condNote,
+      effMain: effMain, effSub: effSub, note: f.note,
+      lastKind: 'never', lastTime: '', on: true,
+      back: { objType: f.objType, objCode: f.objCode, objName: f.objName, condType: f.condType, dir: f.dir, num: f.num, validType: f.validType, dateFrom: f.dateFrom, dateTo: f.dateTo, note: f.note }
+    };
+  }
+
+  function collectForm () {
+    /* 对象：当前可见清单里选中的那一个 */
+    var sel;
+    if (isFundMode()) sel = document.querySelector('#fundList .opt.sel');
+    else sel = document.querySelector('#mktList .opt.sel');
+    if (!sel) { alert('请先在「① 选对象」里点选一个对象'); return null; }
+    var f = {};
+    if (sel.dataset.objType === 'fund') { f.objType = 'fund'; f.objCode = sel.dataset.code; f.objName = ''; }
+    else { f.objType = 'mkt'; f.objName = sel.dataset.name; f.objCode = ''; }
+    f.condType = document.querySelector('#condTab .seg-btn.active').dataset.cond;
+    f.dir = document.getElementById('dirSel').value;
+    var num = document.getElementById('numIn').value.trim();
+    if (!num || isNaN(parseFloat(num)) || parseFloat(num) <= 0) { alert('请在「② 设条件」填写触发数值（只填数字，如 2.0 / 4100）'); return null; }
+    f.num = num;
+    if (!curValid) { alert('请在「③ 有效期」点选一个快捷选项'); return null; }
+    f.validType = curValid;
+    f.dateFrom = document.getElementById('dateFrom').value;
+    f.dateTo = document.getElementById('dateTo').value;
+    if (f.validType === 'range' && (!f.dateFrom || !f.dateTo)) { alert('自定义时间范围需要填开始和结束日期'); return null; }
+    if (f.validType !== 'once' && f.dateFrom && f.dateFrom < todayStr()) f.dateFrom = ''; /* 过去的开始日期按今天处理 */
+    f.note = document.getElementById('noteIn').value.trim();
+    return f;
+  }
+
+  function saveForm () {
+    var f = collectForm();
+    if (!f) return;
+    if (mode === 'edit') {
+      var old = findAlert(editId);
+      if (old) {
+        var nb = buildAlert(f);
+        nb.id = old.id;
+        /* 编辑后：触发状态重置为"未触发过"（条件变了，旧记录不再适用） */
+        nb.lastKind = 'never'; nb.lastTime = '';
+        ALERTS.splice(ALERTS.indexOf(old), 1, nb);
       }
-    });
+    } else {
+      var na = buildAlert(f);
+      na.id = nextId++;
+      ALERTS.push(na);
+    }
+    addModal.classList.remove('open');
+    renderAll();
+    sysNote(mode === 'edit' ? '已更新该提醒' : '提醒已保存：达到条件时会通知你');
+    if (mode === 'add') maybeAskNotify();
+  }
+
+  /* ==========================================================
+     4. 弹层交互事件
+     ========================================================== */
+  document.getElementById('addAlertBtn').addEventListener('click', openForm);
+  document.getElementById('emptyAddBtn').addEventListener('click', openForm);
+  document.getElementById('cancelBtn').addEventListener('click', function () { addModal.classList.remove('open'); });
+  addModal.addEventListener('click', function (e) { if (e.target === addModal) addModal.classList.remove('open'); });
+
+  document.getElementById('objTab').addEventListener('click', function (e) {
+    var b = e.target.closest('.seg-btn'); if (!b) return;
+    document.querySelectorAll('#objTab .seg-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+    document.getElementById('mktList').style.display = b.dataset.tab === 'mkt' ? '' : 'none';
+    document.getElementById('fundList').style.display = b.dataset.tab === 'fund' ? '' : 'none';
+    setFreq();
+    refreshCondUI();
+    showSelInfo('');
   });
 
-  /* ---------- 保存提醒（演示） ---------- */
-  document.getElementById('saveBtn').addEventListener('click', function () {
-    var obj = document.querySelector('.opt-list .opt.sel');
-    if (!obj) { alert('请先在「选对象」里点选一个对象'); return; }
-    if (!curValid) { alert('请先点选一个有效期快捷选项'); return; }
-    var df = dateFrom.value, dt = dateTo.value;
-    if (curValid === 'range' && (!df || !dt)) { alert('自定义时间范围需要填开始和结束日期'); return; }
-    var isFund = fundList.style.display !== 'none';
-    var condType = document.querySelector('#condTab .seg-btn.active').dataset.cond;
-    var dir = document.getElementById('dirSel').value;
-    var num = document.getElementById('numIn').value;
-    var up = dir.indexOf('涨') === 0;
-    var condLabel = condType === 'line'
-      ? '🎯 ' + dir + ' ' + num + ' 点'
-      : (up ? '📈 ' : '📉 ') + '单日' + dir + ' ' + num + '%';
-    var startText, validText;
-    if (curValid === 'once') {
-      startText = '下一交易日生效';
-      validText = '有效期：仅下一交易日 · 系统自动计算';
-    } else if (curValid === 'forever') {
-      startText = df ? '从 ' + df + ' 起' : '立即生效';
-      validText = '有效期：持续到触发';
-    } else {
-      startText = '从 ' + df + ' 起';
-      validText = '有效期：' + df + ' ~ ' + dt;
+  function bindOpts (list) {
+    list.addEventListener('click', function (e) {
+      var o = e.target.closest('.opt'); if (!o) return;
+      list.querySelectorAll('.opt').forEach(function (x) { x.classList.remove('sel'); });
+      o.classList.add('sel');
+      if (o.dataset.objType === 'fund') {
+        var f = FUNDS.filter(function (x) { return x.code === o.dataset.code; })[0];
+        showSelInfo(f.name + '（' + f.tagTxt + '）· ' + f.code);
+      } else {
+        showSelInfo(o.dataset.name + '（' + o.dataset.tag + '）');
+      }
+      refreshCondUI();
+    });
+  }
+  bindOpts(document.getElementById('mktList'));
+  bindOpts(document.getElementById('fundList'));
+
+  document.getElementById('condTab').addEventListener('click', function (e) {
+    var b = e.target.closest('.seg-btn'); if (!b) return;
+    document.querySelectorAll('#condTab .seg-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+    document.getElementById('numIn').value = ''; /* 换条件类型时清空旧数值，避免单位混乱 */
+    refreshCondUI();
+  });
+
+  document.getElementById('validTab').addEventListener('click', function (e) {
+    var b = e.target.closest('.seg-btn'); if (!b) return;
+    document.querySelectorAll('#validTab .seg-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+    curValid = b.dataset.valid;
+    document.getElementById('validDesc').textContent = VALID_DESC[curValid];
+    resetDateRow();
+    if (curValid === 'forever') {
+      document.getElementById('dateRow').style.display = '';
+      document.getElementById('dateTo').style.display = 'none';
+      document.getElementById('dateToLabel').style.display = 'none';
+    } else if (curValid === 'range') {
+      document.getElementById('dateRow').style.display = '';
     }
-    var note = document.getElementById('noteIn').value.trim();
+  });
 
-    var row = document.createElement('div');
-    row.className = 'alert-card';
-    row.innerHTML =
-      '<div class="obj"><div class="n">' + obj.textContent +
-        ' <span class="tag tag-blue">' + (isFund ? '混合型' : '指数') + '</span></div>' +
-      '<div class="d">' + (isFund ? '从你的持仓添加' : '从预设清单添加') + '</div></div>' +
-      '<div class="cond"><div class="c">' + condLabel + '</div><div class="note">' +
-        (isFund ? '涨跌幅条件 · 收盘后检查' : '盘中每 5 分钟检查') + '</div></div>' +
-      '<div class="eff"><b>' + startText + '</b><span>' + validText + '</span>' +
-        (note ? '<span>📝 ' + note + '</span>' : '') + '</div>' +
-      '<div class="last"><b>—</b>未触发</div>' +
-      '<div class="ops"><span class="switch on" data-on="1"></span>' +
-        '<button class="icon-btn" title="编辑">✎</button>' +
-        '<button class="icon-btn del" title="删除">✕</button></div>';
-    (isFund ? document.getElementById('fundGroup') : document.getElementById('mktGroup')).after(row);
-    row.querySelector('.switch').addEventListener('click', toggleSw);
-    row.querySelector('.del').addEventListener('click', delRow);
+  document.getElementById('saveBtn').addEventListener('click', saveForm);
 
-    modal.classList.remove('open');
-    /* 首次创建提醒 → 主动询问桌面通知（通知状态"待确认"，不擅自替用户开启或关闭） */
-    maybeAskNotify();
-    validBtns.forEach(function (x) { x.classList.remove('active'); });
-    curValid = '';
-    dateRow.style.display = 'none';
-    dateTo.style.display = '';
-    dateRow.querySelector('span:nth-child(3)').style.display = '';
-    document.getElementById('noteIn').value = '';
-    document.querySelectorAll('.opt').forEach(function (x) { x.classList.remove('sel'); });
+  /* ==========================================================
+     5. 列表行操作（事件委托）：开关=暂停/恢复，✎=编辑，✕=删除
+        所有操作即时更新列表、分组计数与顶部统计
+     ========================================================== */
+  ['planRows', 'fundRows', 'mktRows'].forEach(function (rowsId) {
+    document.getElementById(rowsId).addEventListener('click', function (e) {
+      var card = e.target.closest('.alert-card');
+      if (!card) return;
+      var id = parseInt(card.dataset.id, 10);
+      var a = findAlert(id);
+      if (!a) return;
+      if (e.target.closest('.switch')) {
+        a.on = !a.on;
+        renderAll();
+        return;
+      }
+      var act = e.target.closest('.icon-btn');
+      if (!act) return;
+      if (act.dataset.act === 'edit') {
+        openEdit(id);
+      } else if (act.dataset.act === 'del') {
+        if (confirm('删除「' + a.name + '」这条提醒？')) {
+          ALERTS.splice(ALERTS.indexOf(a), 1);
+          renderAll();
+          sysNote('已删除该提醒');
+        }
+      }
+    });
   });
 
   /* ==========================================================
-     后台运行演示（需求见产品规划第 22 节）：
-     关闭主窗口提示（可记住选择）→ 最小化到后台（首次提示+托盘菜单）
-     / 退出（有生效提醒时二次确认）；首次创建提醒后询问开机自启
+     6. 模拟触发演示：条件达到 → 通知弹出 → 点击跳转 → 今日已触发
+        候选 = 生效中且今天还没触发过的提醒（"同一提醒当天不重复"）
+        —— 每模拟触发一条，它当天就不再是候选，可连续演示多条
      ========================================================== */
-  var minOverlay = document.getElementById('minOverlay');
-  var minOverlayText = document.getElementById('minOverlayText');
-  var trayPill = document.getElementById('trayPill');
-
-  function activeAlerts () {
-    return document.querySelectorAll('.alert-card .switch.on').length;
+  function simCandidate () {
+    var list = ALERTS.filter(function (r) { return r.on && r.lastKind !== 'today' && r.zone !== 'plan'; });
+    return list.length ? list[0] : null;
   }
-
-  function showOverlay (html) {
-    minOverlayText.innerHTML = html;
-    minOverlay.style.display = 'flex';
-  }
-
-  function goTray () {
-    showOverlay('主窗口已最小化到后台<br><small>点击右下角托盘图标 → 打开主界面（演示）</small>');
-    trayPill.style.display = '';
-    if (!localStorage.getItem('xltc-tray-tip')) {
-      var tip = document.getElementById('trayTip');
-      tip.style.display = '';
-      setTimeout(function () { tip.style.display = 'none'; }, 6000);
-      localStorage.setItem('xltc-tray-tip', '1');
+  function refreshSim () {
+    var c = simCandidate();
+    var el = document.getElementById('simTarget');
+    if (!c) {
+      el.textContent = '当前没有可模拟触发的提醒：生效中的提醒今天都已触发过（当天不重复），或列表为空。可先「＋ 添加提醒」新设一条，或用「重置通知演示」恢复示例。';
+      return;
     }
+    el.textContent = '当前演示对象：' + c.name + ' · ' + c.condIcon + ' ' + c.condCore +
+      '（' + (c.lastKind === 'never' ? '未触发过' : '上次触发后再次触发') + '）——点击上方按钮模拟"条件达到"，点弹出的通知可跳转到这条提醒。';
   }
-
-  function showExited () {
-    showOverlay('小财通已退出（演示）<br><small>生效中的提醒已全部停止 · 刷新页面重新打开</small>');
-    trayPill.style.display = 'none';
-  }
-
-  function doExit () {
-    var n = activeAlerts();
-    if (n > 0) {
-      document.getElementById('exitSub').textContent = '你有 ' + n + ' 条生效中的提醒，退出后这些提醒将停止。';
-      document.getElementById('exitModal').classList.add('open');
-    } else {
-      showExited();
-    }
-  }
-
-  /* 关闭主窗口：记住了选择就直接执行，首次询问 */
-  document.getElementById('closeDemoBtn').addEventListener('click', function () {
-    var beh = localStorage.getItem('xltc-close-behavior');
-    if (beh === 'tray') goTray();
-    else if (beh === 'exit') doExit();
-    else document.getElementById('closeModal').classList.add('open');
-  });
-  document.getElementById('closeTrayBtn').addEventListener('click', function () {
-    if (document.getElementById('closeRemember').checked) localStorage.setItem('xltc-close-behavior', 'tray');
-    document.getElementById('closeModal').classList.remove('open');
-    goTray();
-  });
-  document.getElementById('closeExitBtn').addEventListener('click', function () {
-    if (document.getElementById('closeRemember').checked) localStorage.setItem('xltc-close-behavior', 'exit');
-    document.getElementById('closeModal').classList.remove('open');
-    doExit();
-  });
-
-  /* 退出二次确认 */
-  document.getElementById('exitCancelBtn').addEventListener('click', function () {
-    document.getElementById('exitModal').classList.remove('open');
-  });
-  document.getElementById('exitOkBtn').addEventListener('click', function () {
-    document.getElementById('exitModal').classList.remove('open');
-    showExited();
-  });
-
-  /* 托盘菜单（C1）：打开主界面 / 暂停所有提醒 / 退出 */
-  document.getElementById('trayBtn').addEventListener('click', function () {
-    var m = document.getElementById('trayMenu');
-    m.style.display = m.style.display === 'none' ? '' : 'none';
-  });
-  document.getElementById('trayOpen').addEventListener('click', function () {
-    document.getElementById('trayMenu').style.display = 'none';
-    minOverlay.style.display = 'none';
-    trayPill.style.display = 'none';
-  });
-  document.getElementById('trayPause').addEventListener('click', function () {
-    document.getElementById('trayMenu').style.display = 'none';
-    var paused = 0;
-    document.querySelectorAll('.alert-card .switch').forEach(function (sw) {
-      if (sw.classList.contains('on')) {
-        sw.classList.remove('on');
-        sw.dataset.on = '0';
-        sw.closest('.alert-card').classList.add('paused');
-        paused++;
+  function simTrigger () {
+    var c = simCandidate();
+    if (!c) { sysNote('没有可模拟的提醒：生效中的提醒今天都已触发过（当天不重复），或列表为空'); return; }
+    var prev = c.lastKind;
+    c.lastKind = 'today';
+    c.lastTime = '刚刚';
+    renderAll();
+    window.showToast({
+      title: c.name + ' 已触发你的提醒',
+      body: (c.condIcon ? c.condIcon + ' ' : '') + c.condCore + ' · ' +
+        (prev === 'never' ? '第一次触发' : '再次触发') + '（网页模拟触发，非真实行情）',
+      time: '刚刚',
+      onClick: function () {
+        var el = document.querySelector('#planRows [data-id="' + c.id + '"], #fundRows [data-id="' + c.id + '"], #mktRows [data-id="' + c.id + '"]');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('flash');
+          setTimeout(function () { el.classList.remove('flash'); }, 2400);
+        }
       }
     });
-    alert('已暂停 ' + paused + ' 条提醒（演示）');
-  });
-  document.getElementById('trayQuit').addEventListener('click', function () {
-    document.getElementById('trayMenu').style.display = 'none';
-    doExit();
-  });
+  }
+  document.getElementById('simTriggerBtn').addEventListener('click', simTrigger);
 
-  /* ---------- 桌面通知总状态（与市场事件页统一；默认开启，首次使用时询问是否保留） ---------- */
+  /* ==========================================================
+     7. 桌面通知总状态（与市场事件页共用同一套 localStorage，真正跨页同步）
+        默认开启；首次使用时询问是否保留（不擅自替用户开启或关闭）
+     ========================================================== */
   function sysNote (text) {
     var n = document.getElementById('sysNote');
     n.textContent = text;
@@ -732,8 +935,7 @@
     bar.querySelector('.switch').classList.toggle('on', sub);
   }
   function openNotifyAsk (reask) {
-    var hint = document.getElementById('askHintAlerts');
-    hint.style.display = reask ? '' : 'none';
+    document.getElementById('askHintAlerts').style.display = reask ? '' : 'none';
     document.getElementById('notifyAskModal').classList.add('open');
   }
   function maybeAskNotify () {
@@ -746,9 +948,8 @@
     document.getElementById('notifyAskModal').classList.remove('open');
     renderAlertsNtf();
     sysNote('已记住你的选择：保留桌面通知（以后不再询问，可在「设置」中修改）');
-    /* 同意保留后，顺势询问开机自启（B1） */
     if (!localStorage.getItem('xltc-autostart-asked')) {
-      document.getElementById('autoStartModal').classList.add('open');
+      document.getElementById('autoStartModal').classList.add('open'); /* 同意保留后顺势询问开机自启 */
     }
   });
   document.getElementById('notifyAskNoBtn').addEventListener('click', function () {
@@ -764,13 +965,12 @@
     localStorage.setItem('xltc-notify-alerts', alertsSubOn() ? '0' : '1');
     renderAlertsNtf();
   });
-  /* 跨页面同步：市场事件页改变总状态时，本页立即刷新显示 */
+  /* 跨页同步：市场事件页改变总状态时，本页立即刷新显示（同一套记忆） */
   window.addEventListener('storage', function (e) {
     if (e.key && e.key.indexOf('xltc-notify') === 0) renderAlertsNtf();
   });
-  renderAlertsNtf();
 
-  /* 开机自启询问（在用户同意开启桌面通知后询问一次，拒绝后不反复） */
+  /* 开机自启询问（同意保留桌面通知后询问一次，拒绝后不反复） */
   document.getElementById('autoYesBtn').addEventListener('click', function () {
     localStorage.setItem('xltc-autostart', '1');
     localStorage.setItem('xltc-autostart-asked', '1');
@@ -788,47 +988,108 @@
     this.textContent = '知道了';
   });
 
-  /* 新弹层的遮罩点击关闭 */
+  /* ==========================================================
+     8. 后台运行演示（需求见产品规划第 22 节，网页模拟）：
+        关闭主窗口提示（可记住选择）→ 最小化到后台（托盘菜单）/ 退出（二次确认）
+     ========================================================== */
+  var minOverlay = document.getElementById('minOverlay');
+  var minOverlayText = document.getElementById('minOverlayText');
+  var trayPill = document.getElementById('trayPill');
+
+  function activeAlerts () {
+    var n = 0;
+    ALERTS.forEach(function (r) { if (r.on) n++; });
+    return n;
+  }
+  function showOverlay (html) {
+    minOverlayText.innerHTML = html;
+    minOverlay.style.display = 'flex';
+  }
+  function goTray () {
+    showOverlay('主窗口已最小化到后台<br><small>点击右下角托盘图标 → 打开主界面（演示）</small>');
+    trayPill.style.display = '';
+    if (!localStorage.getItem('xltc-tray-tip')) {
+      var tip = document.getElementById('trayTip');
+      tip.style.display = '';
+      setTimeout(function () { tip.style.display = 'none'; }, 6000);
+      localStorage.setItem('xltc-tray-tip', '1');
+    }
+  }
+  function showExited () {
+    showOverlay('小财通已退出（演示）<br><small>生效中的提醒已全部停止 · 刷新页面重新打开</small>');
+    trayPill.style.display = 'none';
+  }
+  function doExit () {
+    var n = activeAlerts();
+    if (n > 0) {
+      document.getElementById('exitSub').textContent = '你有 ' + n + ' 条生效中的提醒，退出后这些提醒将停止。';
+      document.getElementById('exitModal').classList.add('open');
+    } else {
+      showExited();
+    }
+  }
+  document.getElementById('closeDemoBtn').addEventListener('click', function () {
+    var beh = localStorage.getItem('xltc-close-behavior');
+    if (beh === 'tray') goTray();
+    else if (beh === 'exit') doExit();
+    else document.getElementById('closeModal').classList.add('open');
+  });
+  document.getElementById('closeTrayBtn').addEventListener('click', function () {
+    if (document.getElementById('closeRemember').checked) localStorage.setItem('xltc-close-behavior', 'tray');
+    document.getElementById('closeModal').classList.remove('open');
+    goTray();
+  });
+  document.getElementById('closeExitBtn').addEventListener('click', function () {
+    if (document.getElementById('closeRemember').checked) localStorage.setItem('xltc-close-behavior', 'exit');
+    document.getElementById('closeModal').classList.remove('open');
+    doExit();
+  });
+  document.getElementById('exitCancelBtn').addEventListener('click', function () {
+    document.getElementById('exitModal').classList.remove('open');
+  });
+  document.getElementById('exitOkBtn').addEventListener('click', function () {
+    document.getElementById('exitModal').classList.remove('open');
+    showExited();
+  });
+  document.getElementById('trayBtn').addEventListener('click', function () {
+    var m = document.getElementById('trayMenu');
+    m.style.display = m.style.display === 'none' ? '' : 'none';
+  });
+  document.getElementById('trayOpen').addEventListener('click', function () {
+    document.getElementById('trayMenu').style.display = 'none';
+    minOverlay.style.display = 'none';
+    trayPill.style.display = 'none';
+  });
+  document.getElementById('trayPause').addEventListener('click', function () {
+    document.getElementById('trayMenu').style.display = 'none';
+    var paused = 0;
+    ALERTS.forEach(function (r) { if (r.on) { r.on = false; paused++; } });
+    renderAll();
+    alert('已暂停 ' + paused + ' 条提醒（演示）');
+  });
+  document.getElementById('trayQuit').addEventListener('click', function () {
+    document.getElementById('trayMenu').style.display = 'none';
+    doExit();
+  });
+
+  /* 各弹层遮罩点击关闭 */
   ['closeModal', 'exitModal', 'autoStartModal', 'notifyAskModal'].forEach(function (id) {
     document.getElementById(id).addEventListener('click', function (e) {
       if (e.target === this) this.classList.remove('open');
     });
   });
+
+  /* 重置通知演示：清空已记住的通知选择（xltc-notify-* / 自启），恢复"待确认"初始状态 */
+  document.getElementById('resetDemoBtn').addEventListener('click', function () {
+    ['xltc-notify-master', 'xltc-notify-asked', 'xltc-notify-follow', 'xltc-notify-discover', 'xltc-notify-event', 'xltc-notify-alerts', 'xltc-notify-global', 'xltc-autostart', 'xltc-autostart-asked'].forEach(function (k) { localStorage.removeItem(k); });
+    location.reload();
+  });
+
+  /* ---------- 初始化 ---------- */
+  buildOptLists();
+  renderAlertsNtf();
+  renderAll();
 }());
-</script>
-
-<script>
-/* ---------- 通知效果演示：模拟系统通知（点击跳转到对应提醒位置，正式版会真正跳转） ---------- */
-function demoAlertToast () {
-  window.showToast({
-    title: '沪深300 已触发你的提醒',
-    body: '当前 4,086 点，已跌破你设置的 4,100 点',
-    time: '刚刚',
-    onClick: function () {
-      var el = document.getElementById('alertHs300');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
-        el.classList.add('flash');
-        setTimeout(function () { el.classList.remove('flash'); }, 2000);
-      }
-    }
-  });
-}
-document.getElementById('testToastAlertBtn').addEventListener('click', demoAlertToast);
-document.getElementById('demoToastAlert').addEventListener('click', demoAlertToast);
-document.getElementById('demoToastNews').addEventListener('click', function () {
-  window.showToast({
-    title: '你关注的基金经理发生变动',
-    body: '易方达××基金发布基金经理变更公告',
-    time: '2分钟前'
-  });
-});
-
-/* ---------- 重置通知演示：清除已记住的通知选择，恢复"待确认"状态 ---------- */
-document.getElementById('resetDemoBtn').addEventListener('click', function () {
-  ['xltc-notify-master', 'xltc-notify-asked', 'xltc-notify-follow', 'xltc-notify-discover', 'xltc-notify-event', 'xltc-notify-alerts', 'xltc-notify-global', 'xltc-autostart', 'xltc-autostart-asked'].forEach(function (k) { localStorage.removeItem(k); });
-  location.reload();
-});
 </script>
 
 </body>

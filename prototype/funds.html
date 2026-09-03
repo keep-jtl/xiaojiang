@@ -96,7 +96,7 @@
 
 <main class="page">
   <div class="page-title">我的基金</div>
-  <div class="page-sub">持仓总览 · 数据每晚净值更新后自动刷新（原型演示为示例数据）</div>
+  <div class="page-sub">持仓总览 · 正式版接入真实净值数据源后每晚自动刷新；当前原型使用示例净值（示例数据）</div>
 
   <!-- 操作区 -->
   <div class="page-actions">
@@ -143,7 +143,7 @@
   <!-- 基金卡片（由脚本渲染） -->
   <div id="fundList"></div>
 
-  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。本页已可完整操作：<b>＋添加基金</b>（示例基金库搜索→选基金→填本金/份额→加入列表）、<b>点基金卡片看详情</b>（净值/持有/历史表现/风险/经理，均为示例）、<b>「重仓/普通/仅关注」标记</b>（点击切换，作为消息筛选与提醒的关联基础）、<b>卡片上「📝 记录」</b>（买入理由/当时判断/观察重点/备注，仅自己可见）、<b>「清仓」</b>（填写复盘：为什么清仓/当时判断/哪里做得好/哪里值得复盘）、<b>历史持仓</b>（点击任意一条回看买入记录与清仓复盘）。「🔄 重置基金演示」可清空本次演示改动。真实基金数据、净值与收益计算等正式 App 阶段实现。</div>
+  <div class="demo-note">✓ 界面原型（示例数据，非真实数据）。本页已可完整操作：<b>＋添加基金</b>（示例基金库搜索→选基金→填本金/份额→加入列表）、<b>点基金卡片看详情</b>（净值与持有为示例净值计算；历史表现、回撤、波动率等指标正式版接入真实净值后提供，原型不展示演示数字）、<b>「重仓/普通/仅关注」标记</b>（点击切换，作为消息筛选与提醒的关联基础）、<b>卡片上「📝 记录」</b>（买入理由/当时判断/观察重点/备注，仅自己可见）、<b>「清仓」</b>（填写复盘：为什么清仓/当时判断/哪里做得好/哪里值得复盘）、<b>历史持仓</b>（点击任意一条回看买入记录与清仓复盘）。「🔄 重置基金演示」可清空本次演示改动。真实基金数据、净值与收益计算等正式 App 阶段实现。</div>
 </main>
 
 <!-- 添加基金弹层 -->
@@ -274,8 +274,9 @@
     { name: '易方达消费行业股票', from: '2025-03', to: '2026-01', cost: 20000, sell: 21600,
       note: { buy: '看好消费复苏，买一只消费主动基做底仓。', judge: '消费估值在历史低位，认为跌不动了。', watch: '关注社零数据和白酒批价。', remark: '' },
       clear: { reason: '持有大半年收益平平，消费数据一直没起色，想腾出资金。', judge: '当时判断消费还要磨底，先出来观察。', good: '及时止损没有死扛，避免了后续继续下跌。', review: '买入理由不够扎实，只看便宜没看基本面拐点，下次要多想一步。' } },
-    { name: '招商中证白酒指数A', from: '2025-06', to: '2026-02', cost: 12000, sell: 13080,
-      clear: { reason: '达到自己设定的止盈线 +9%。', judge: '白酒反弹到位置了，落袋为安。', good: '执行了计划，没贪。', review: '卖早了，后来继续涨了，但按纪律卖没错。' } }
+    { name: '华夏国证半导体芯片ETF联接A', from: '2025-06', to: '2026-02', cost: 12000, sell: 13080,
+      note: { buy: '看好国产替代的长期方向，想配一点半导体。', judge: '当时板块热度已经起来，决定小仓位试水并设好止盈线。', watch: '关注芯片价格周期、出口政策和板块波动。', remark: '' },
+      clear: { reason: '达到自己设定的止盈线 +9%。', judge: '反弹到位置了，落袋为安。', good: '执行了计划，没贪。', review: '卖早了，后来继续涨了，但按纪律卖没错。' } }
   ];
   function loadJSON (key, def) {
     try { var v = JSON.parse(localStorage.getItem(key)); return v || def; } catch (e) { return def; }
@@ -423,13 +424,6 @@
     var f = lib(code);
     var h = holdings.filter(function (x) { return x.code === code; })[0];
     var m = mv(h), p = profit(h), pct = p / h.cost * 100;
-    var seed = parseInt(code, 10) % 17;
-    var m1 = (seed % 7 - 2).toFixed(1);
-    var m3 = (seed % 11 - 3).toFixed(1);
-    var y1 = seed % 15 + 6;
-    var y3 = seed % 25 + 15;
-    var dd = seed % 12 + 8;
-    var vol = seed % 10 + 12;
     var upP = p >= 0 ? 'up' : 'down';
     document.getElementById('detailBody').innerHTML =
       '<h3>' + f.name + ' <span class="tag tag-blue">' + f.type + '</span>' +
@@ -443,18 +437,14 @@
         '<div class="d-item"><div class="l">持有份额</div><div class="v num">' + fmt(h.shares) + '</div></div>' +
         '<div class="d-item"><div class="l">买入时间</div><div class="v">' + h.from + '</div></div>' +
       '</div>' +
-      '<div class="m-sec">历史表现（示例数据，正式版按真实净值计算）</div>' +
-      '<table class="d-table"><tr><th>近 1 月</th><th>近 3 月</th><th>近 1 年</th><th>近 3 年</th></tr>' +
-      '<tr><td class="num ' + (parseFloat(m1) >= 0 ? 'up' : 'down') + '">' + sign(parseFloat(m1)) + m1 + '%</td>' +
-      '<td class="num ' + (parseFloat(m3) >= 0 ? 'up' : 'down') + '">' + sign(parseFloat(m3)) + m3 + '%</td>' +
-      '<td class="num up">+' + y1 + '%</td><td class="num up">+' + y3 + '%</td></tr></table>' +
-      '<div class="m-sec">风险信息（示例数据）</div>' +
-      '<table class="d-table"><tr><th>风险等级</th><th>最大回撤</th><th>波动率</th></tr>' +
-      '<tr><td>' + f.risk + '</td><td class="num down">-' + dd + '%</td><td class="num">' + vol + '%</td></tr></table>' +
-      '<div class="m-sec">白话小结</div>' +
-      '<p style="font-size:13px;color:var(--ink-2);">过去一年示例收益约 +' + y1 + '%，最大回撤约 -' + dd + '%，属于' + f.risk + '品种。' +
-        (f.manager ? '现任基金经理 ' + f.manager + '。' : '') +
-        '以上为示例数据，仅供研究参考，不构成投资建议。</p>' +
+      '<div class="m-sec">历史表现</div>' +
+      '<div class="freq-note">近 1 月 / 近 3 月 / 近 1 年 / 近 3 年收益：<b>正式版接入真实历史净值后提供</b>。原型阶段不展示演示数字，避免误导。</div>' +
+      '<div class="m-sec">风险信息</div>' +
+      '<div class="freq-note">风险等级（示例属性）：' + f.risk + '。最大回撤、波动率等指标：<b>正式版接入真实历史净值后计算提供</b>。</div>' +
+      '<div class="m-sec">白话小结（示例模板）</div>' +
+      '<p style="font-size:13px;color:var(--ink-2);">这只基金属于' + f.risk + '品种' +
+        (f.manager ? '，现任基金经理 ' + f.manager : '') +
+        '。正式版接入真实净值后，这里会用大白话解释它的历史表现、回撤经历，以及这些变化对你持仓的含义。当前为示例说明，不构成投资建议。</p>' +
       '<div class="m-foot">' +
         '<button class="btn btn-ghost btn-sm" id="detailClearBtn">清仓该基金</button>' +
         '<button class="btn btn-sm" id="detailCloseBtn">关闭</button>' +
