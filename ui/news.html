@@ -854,9 +854,7 @@
           <div class="t"><b>重大市场事件</b><span>本页内醒目显示 · 通知默认关</span></div>
           <span class="switch" id="eventSwitch"></span>
         </div>
-        <div class="card-hint">桌面通知默认开启，首次使用时小财通会主动询问你是否保留；总状态与盯盘提醒页统一，三个子开关（我的关注 / 市场发现 / 重大市场事件）各自独立。重大市场事件在本页内靠橙色左边条 + ⚠️ 标记 +「重大」徽章提高视觉优先级；同一事件只推一次。</div>
-        <button class="btn btn-sm" id="demoToastBtn" style="width:100%; justify-content:center; margin-top:12px;">🖥 网页通知效果预览（模拟）</button>
-        <button class="btn btn-ghost btn-sm" id="resetDemoBtn" style="width:100%; justify-content:center; margin-top:8px;">🔄 重置通知演示</button>
+        <div class="card-hint">桌面通知默认开启，首次使用时小财通会主动询问你是否保留；总状态与盯盘提醒页统一，三个子开关（我的关注 / 市场发现 / 重大市场事件）各自独立。重大市场事件在本页内靠橙色左边条 + ⚠️ 标记 +「重大」徽章提高视觉优先级；同一事件只推一次。（网页通知效果预览入口已于 2026-09-04 移除——真实 Windows 系统通知能力留待正式 App 阶段实现。）</div>
       </div>
 
       <!-- 今天与你有关 -->
@@ -1164,29 +1162,6 @@
   });
   document.getElementById('autoStartModal').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');
-  });
-
-  /* ---------- 测试通知与重置演示 ---------- */
-  document.getElementById('demoToastBtn').addEventListener('click', function () {
-    window.showToast({
-      title: '你关注的基金经理发生变动',
-      body: '中欧医疗健康混合A 增聘一位基金经理',
-      time: '2分钟前',
-      onClick: function () {
-        /* 模拟跳转：切到「我的关注」并定位到经理变动事件（在今日小结里） */
-        document.querySelector('.zone-btn[data-zone="follow"]').click();
-        var el = document.getElementById('msgManager');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-          el.classList.add('flash');
-          setTimeout(function () { el.classList.remove('flash'); }, 2000);
-        }
-      }
-    });
-  });
-  document.getElementById('resetDemoBtn').addEventListener('click', function () {
-    ['xltc-notify-master', 'xltc-notify-asked', 'xltc-notify-follow', 'xltc-notify-discover', 'xltc-notify-event', 'xltc-notify-alerts', 'xltc-notify-global', 'xltc-autostart', 'xltc-autostart-asked'].forEach(function (k) { localStorage.removeItem(k); });
-    location.reload();
   });
 
   updateCounts();

@@ -103,7 +103,6 @@
   /* 空状态 / 演示说明行 */
   .empty-card { text-align: center; padding: 40px 20px; }
   .empty-card .btn { margin-top: 14px; }
-  .sim-line { font-size: 12px; color: var(--ink-3); margin-top: 8px; line-height: 1.6; }
 
   @media (max-width: 900px) {
     .alert-stats { grid-template-columns: repeat(2, 1fr); }
@@ -155,16 +154,6 @@
     <div class="item"><div class="l">计划中</div><div class="v" id="stPlan">0</div><div class="s" id="stPlanSub">—</div></div>
     <div class="item"><div class="l">暂停</div><div class="v" id="stPause">0</div><div class="s">随时可恢复</div></div>
     <div class="item"><div class="l">今日已触发</div><div class="v" id="stToday">0</div><div class="s" id="stTodaySub">—</div></div>
-  </div>
-
-  <!-- 触发与通知演示（模拟） -->
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-title">🔔 触发与通知演示（模拟） <span class="hint">模拟"条件达到 → 通知弹出 → 点击跳转"的完整链路 · 真实系统通知与后台监控留待正式 App 阶段</span></div>
-    <div class="page-actions" style="margin-bottom:0; justify-content:flex-start;">
-      <button class="btn btn-ghost btn-sm" id="simTriggerBtn">⚡ 模拟触发一条提醒</button>
-      <button class="btn btn-ghost btn-sm" id="resetDemoBtn">🔄 重置通知演示</button>
-    </div>
-    <div class="sim-line" id="simTarget"></div>
   </div>
 
   <!-- 计划中（待生效）：设置了但还没到开始时间的提醒（如"仅下一交易日"今晚设置、明天才检查） -->
@@ -336,7 +325,7 @@
     </div>
   </div>
 
-  <div class="demo-note">✓ 网页原型（2026-09-03 重构版，待验收；页面内容为<b>示例数据</b>，非真实行情/持仓）。本页回答：设好条件、达到才通知、不用天天盯盘。<b>真正可操作</b>：添加（选对象 → 设条件 → 选有效期 → 备注 → 保存）/ 编辑（✎ 回填修改）/ 暂停与恢复（每行开关）/ 删除；顶部统计与分组数量随操作实时变化；「⚡ 模拟触发一条提醒」演示完整链路：条件达到 → 通知弹出 → 点击通知跳转该提醒并标记「今日已触发」→ 当天不再重复。<b>示例数据</b>：提醒清单、行情数字、历史触发记录均为演示用示例（基金与「我的基金」页演示持仓一致）。<b>共用状态</b>：通知开关与市场事件页共用同一套记忆——本页关掉总通知，市场事件页同步生效（反之亦然），首次使用询问是否保留；关闭窗口/托盘/开机自启为网页模拟演示。<b>等正式 App</b>：真实行情检查（指数盘中每 5 分钟、场外基金收盘后检查净值）、真实系统通知、开机自启与托盘后台、点击通知跳转、历史记录自动留存。</div>
+  <div class="demo-note">✓ 网页原型（2026-09-03 重构版，页面内容为<b>示例数据</b>，非真实行情/持仓）。本页回答：设好条件、达到才通知、不用天天盯盘。<b>真正可操作</b>：添加（选对象 → 设条件 → 选有效期 → 备注 → 保存）/ 编辑（✎ 回填修改）/ 暂停与恢复（每行开关）/ 删除；顶部统计与分组数量随操作实时变化。<b>示例数据</b>：提醒清单、行情数字、历史触发记录均为演示用示例（基金与「我的基金」页演示持仓一致）。<b>共用状态</b>：通知开关与市场事件页共用同一套记忆——本页关掉总通知，市场事件页同步生效（反之亦然），首次使用询问是否保留；关闭窗口/托盘/开机自启为网页模拟演示（入口 2026-09-04 已收敛，真实能力等正式 App）。<b>等正式 App</b>：真实行情检查（指数盘中每 5 分钟、场外基金收盘后检查净值）、真实系统通知、开机自启与托盘后台、点击通知跳转、历史记录自动留存。</div>
 </main>
 
 <script src="nav.js"></script>
@@ -508,7 +497,6 @@
     document.getElementById('emptyAll').style.display = ALERTS.length ? 'none' : '';
     renderCents();
     renderStats();
-    refreshSim();
   }
 
   /* ==========================================================
@@ -857,50 +845,7 @@
   });
 
   /* ==========================================================
-     6. 模拟触发演示：条件达到 → 通知弹出 → 点击跳转 → 今日已触发
-        候选 = 生效中且今天还没触发过的提醒（"同一提醒当天不重复"）
-        —— 每模拟触发一条，它当天就不再是候选，可连续演示多条
-     ========================================================== */
-  function simCandidate () {
-    var list = ALERTS.filter(function (r) { return r.on && r.lastKind !== 'today' && r.zone !== 'plan'; });
-    return list.length ? list[0] : null;
-  }
-  function refreshSim () {
-    var c = simCandidate();
-    var el = document.getElementById('simTarget');
-    if (!c) {
-      el.textContent = '当前没有可模拟触发的提醒：生效中的提醒今天都已触发过（当天不重复），或列表为空。可先「＋ 添加提醒」新设一条，或用「重置通知演示」恢复示例。';
-      return;
-    }
-    el.textContent = '当前演示对象：' + c.name + ' · ' + c.condIcon + ' ' + c.condCore +
-      '（' + (c.lastKind === 'never' ? '未触发过' : '上次触发后再次触发') + '）——点击上方按钮模拟"条件达到"，点弹出的通知可跳转到这条提醒。';
-  }
-  function simTrigger () {
-    var c = simCandidate();
-    if (!c) { sysNote('没有可模拟的提醒：生效中的提醒今天都已触发过（当天不重复），或列表为空'); return; }
-    var prev = c.lastKind;
-    c.lastKind = 'today';
-    c.lastTime = '刚刚';
-    renderAll();
-    window.showToast({
-      title: c.name + ' 已触发你的提醒',
-      body: (c.condIcon ? c.condIcon + ' ' : '') + c.condCore + ' · ' +
-        (prev === 'never' ? '第一次触发' : '再次触发') + '（网页模拟触发，非真实行情）',
-      time: '刚刚',
-      onClick: function () {
-        var el = document.querySelector('#planRows [data-id="' + c.id + '"], #fundRows [data-id="' + c.id + '"], #mktRows [data-id="' + c.id + '"]');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('flash');
-          setTimeout(function () { el.classList.remove('flash'); }, 2400);
-        }
-      }
-    });
-  }
-  document.getElementById('simTriggerBtn').addEventListener('click', simTrigger);
-
-  /* ==========================================================
-     7. 桌面通知总状态（与市场事件页共用同一套 localStorage，真正跨页同步）
+     6. 桌面通知总状态（与市场事件页共用同一套 localStorage，真正跨页同步）
         默认开启；首次使用时询问是否保留（不擅自替用户开启或关闭）
      ========================================================== */
   function sysNote (text) {
@@ -1077,12 +1022,6 @@
     document.getElementById(id).addEventListener('click', function (e) {
       if (e.target === this) this.classList.remove('open');
     });
-  });
-
-  /* 重置通知演示：清空已记住的通知选择（xltc-notify-* / 自启），恢复"待确认"初始状态 */
-  document.getElementById('resetDemoBtn').addEventListener('click', function () {
-    ['xltc-notify-master', 'xltc-notify-asked', 'xltc-notify-follow', 'xltc-notify-discover', 'xltc-notify-event', 'xltc-notify-alerts', 'xltc-notify-global', 'xltc-autostart', 'xltc-autostart-asked'].forEach(function (k) { localStorage.removeItem(k); });
-    location.reload();
   });
 
   /* ---------- 初始化 ---------- */

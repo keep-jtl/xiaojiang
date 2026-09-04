@@ -92,10 +92,14 @@ def refresh_fund_nav(code):
 
 
 def latest_nav(conn, code):
-    """最近一条净值 → dict（nav_date/unit_nav_scaled/daily_pct_scaled）或 None"""
+    """最近一条净值 → dict（nav_date/unit_nav_scaled/daily_pct_scaled/fetched_at/source）或 None
+
+    fetched_at/source 供界面展示"净值日 vs 数据获取时间 vs 数据来源"三要素
+    （2026-09-04 用户确认：抓取时间 ≠ 净值日期，两者必须区分展示）
+    """
     row = conn.execute(
-        "SELECT nav_date, unit_nav_scaled, daily_pct_scaled FROM fund_nav_daily "
-        "WHERE fund_code = ? ORDER BY nav_date DESC LIMIT 1",
+        "SELECT nav_date, unit_nav_scaled, daily_pct_scaled, fetched_at, source "
+        "FROM fund_nav_daily WHERE fund_code = ? ORDER BY nav_date DESC LIMIT 1",
         (code,),
     ).fetchone()
     return dict(row) if row else None

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """小财通 MVP —— 程序入口
 
-启动方式（项目根目录）：
-    .venv\\Scripts\\python app\\main.py
+启动方式（项目根目录，注意必须用 -m 以支持包内相对导入）：
+    .venv\\Scripts\\python -m app.main
 
 做什么：初始化数据库 → 启动内置网页服务（指向 ui/ 目录）→ 打开 pywebview 窗口加载页面。
 MVP 起步默认打开「我的基金」页（第一页改造），改造完成的页面依次接入。

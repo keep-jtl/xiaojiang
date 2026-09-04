@@ -297,3 +297,17 @@ def set_setting(conn, key, value):
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
         (key, value, now_str()),
     )
+
+
+def get_app_meta(conn, key, default=None):
+    """程序元数据读取（app_meta 表，程序自用不上云）"""
+    row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_app_meta(conn, key, value):
+    conn.execute(
+        "INSERT INTO app_meta (key, value, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        (key, value, now_str()),
+    )
