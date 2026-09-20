@@ -14,6 +14,7 @@
 
 本文件按「我的基金」页改造起步提供接口，随逐页改造扩充。
 """
+import datetime
 import json
 import threading
 import uuid
@@ -22,7 +23,9 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from . import converters as cv
 from . import db as dbm
+from . import market_cal as mcal
 from .sources import fund_list, fund_nav as src
+from .sources import market_quotes as mq
 
 # 持仓记录/复盘允许前端直接更新的文本字段白名单
 HOLDING_TEXT_FIELDS = {"buy_reason", "buy_judge", "watch_points", "remark"}
@@ -33,7 +36,8 @@ HOLDING_TEXT_FIELDS = {"buy_reason", "buy_judge", "watch_points", "remark"}
 NAV_REFRESH_LOCK = threading.Lock()
 
 # 页面显示用的数据源名称（source 字段存内部标识，展示名在此映射，换源时只改这里）
-SOURCE_LABELS = {"akshare": "天天基金（公开接口）", "manual": "手动建档"}
+SOURCE_LABELS = {"akshare": "天天基金（公开接口）", "manual": "手动建档",
+                 "tencent": "腾讯行情", "sina": "新浪行情"}
 
 
 class Api:
@@ -42,6 +46,128 @@ class Api:
     # ---------- 健康检查 ----------
     def ping(self):
         return "pong"
+
+    # ---------- 首页：市场速览 + 市场会话（2026-09-05，共用统一日历服务） ----------
+    def get_market_quotes(self, codes=None):
+        """市场速览行情（首页 8 指数等）。codes 缺省 = market_meta 全部启用对象。
+
+        每项 {code, name, market, price_str, pct_str, prev_str,
+              quote_time(行情时间), fetched_at(获取时间), source_label, available}
+        从未成功拉过（库内无行）→ available=False 各项 None，界面显示"暂不可用"；
+        绝不用示例数据冒充（用户 2026-09-05 口径）。
+        """
+        conn = dbm.connect()
+        try:
+            if codes:
+                qmarks = ",".join("?" * len(codes))
+                rows = conn.execute(
+                    f"SELECT m.code, m.name, m.market, q.price_scaled, q.change_pct_scaled,"
+                    f" q.prev_close_scaled, q.quote_time, q.fetched_at, q.source "
+                    f"FROM market_meta m LEFT JOIN market_quotes q ON q.mkt_code = m.code "
+                    f"WHERE m.code IN ({qmarks}) AND m.enabled = 1 "
+                    f"ORDER BY m.display_order", (*codes,)).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT m.code, m.name, m.market, q.price_scaled, q.change_pct_scaled,"
+                    " q.prev_close_scaled, q.quote_time, q.fetched_at, q.source "
+                    "FROM market_meta m LEFT JOIN market_quotes q ON q.mkt_code = m.code "
+                    "WHERE m.enabled = 1 ORDER BY m.display_order").fetchall()
+            items = []
+            for r in rows:
+                it = {"code": r["code"], "name": r["name"], "market": r["market"],
+                      "available": r["price_scaled"] is not None}
+                if it["available"]:
+                    it["price_str"] = _price2_str(r["price_scaled"])
+                    it["pct_str"] = _pct2_str(r["change_pct_scaled"])
+                    it["prev_str"] = _price2_str(r["prev_close_scaled"])
+                    it["quote_time"] = r["quote_time"] or None
+                    it["fetched_at"] = r["fetched_at"]
+                    it["source_label"] = SOURCE_LABELS.get(r["source"], r["source"])
+                else:
+                    for k in ("price_str", "pct_str", "prev_str", "quote_time", "fetched_at", "source_label"):
+                        it[k] = None
+                items.append(it)
+            return {"items": items}
+        finally:
+            conn.close()
+
+    def refresh_market_quotes(self, codes=None):
+        """手动刷新行情（后台线程）：腾讯主源→新浪备用→入库；完成派发
+        dataUpdated {type: 'marketQuotesUpdated'}，界面重取。失败保留旧值不覆盖。"""
+        conn = dbm.connect()
+        try:
+            if codes:
+                qmarks = ",".join("?" * len(codes))
+                rows = conn.execute(
+                    f"SELECT code FROM market_meta WHERE enabled = 1 AND code IN ({qmarks})",
+                    (*codes,)).fetchall()
+            else:
+                rows = conn.execute("SELECT code FROM market_meta WHERE enabled = 1").fetchall()
+            all_codes = [r["code"] for r in rows]
+        finally:
+            conn.close()
+        if not all_codes:
+            return {"ok": True, "skipped": True}
+        threading.Thread(target=self._quote_worker, args=(all_codes,), daemon=True).start()
+        return {"ok": True}
+
+    def _quote_worker(self, codes):
+        conn = dbm.connect()
+        try:
+            res = mq.refresh_market_quotes(conn, codes)
+            stale_codes = list(res["stale"].keys())
+        finally:
+            conn.close()
+        self._notify_js({"type": "marketQuotesUpdated", "ok": len(stale_codes) == 0,
+                         "stale": stale_codes, "at": dbm.now_str()})
+
+    def get_market_sessions(self):
+        """三市场会话状态（交易日历统一服务的唯一界面出口，盯盘提醒页复用）。
+
+        返回 {checked_at, order: [市场序（交易中的市场前置）],
+              markets: {cn/hk/us: {state, label, note, date}},
+              summary: 一句话市场状态, warnings: [异常说明]}
+        state ∈ trading/preopen/closed/holiday/noon_break/no_data
+        label ∈ 交易中/未开盘/已收盘/休市/无法判断；note 为小白可读小字；
+        no_data = 官方日历缺失（未公布年份）→ 显式"无法判断"，绝不猜。
+        """
+        conn = dbm.connect()
+        try:
+            return _market_sessions(conn)
+        finally:
+            conn.close()
+
+    def get_today_alerts(self):
+        """首页「今日提醒」卡（MVP 真实数据：提醒引擎尚未接线时即为真实空态）。
+
+        返回 {enabled_count, today: [{id, obj_name, cond_type, direction, cond_value,
+              note, triggered_at, actual_value, notify_state, acked}]}
+        today = 今日（trigger_date=今天）的触发记录；没有触发 → 空数组，界面显示空态；
+        enabled_count = 启用中的提醒规则数（引导用户去盯盘提醒页）。
+        """
+        conn = dbm.connect()
+        try:
+            today = dbm.today_str()
+            rows = conn.execute(
+                "SELECT a.id, a.obj_type, a.cond_type, a.direction, a.cond_value, a.note,"
+                " COALESCE(f.name, m.name, a.fund_code, a.mkt_code) AS obj_name,"
+                " e.trigger_date, e.triggered_at, e.actual_value, e.notify_state, e.acked"
+                " FROM alerts a"
+                " LEFT JOIN alert_events e ON e.alert_id = a.id AND e.trigger_date = ?"
+                " LEFT JOIN fund_meta f ON f.code = a.fund_code"
+                " LEFT JOIN market_meta m ON m.code = a.mkt_code"
+                " WHERE a.deleted = 0 AND e.alert_id IS NOT NULL"
+                " ORDER BY e.triggered_at DESC, a.id", (today,)).fetchall()
+            items = [{"id": r["id"], "obj_name": r["obj_name"], "cond_type": r["cond_type"],
+                      "direction": r["direction"], "cond_value": r["cond_value"],
+                      "note": r["note"] or "", "triggered_at": r["triggered_at"],
+                      "actual_value": r["actual_value"], "notify_state": r["notify_state"],
+                      "acked": bool(r["acked"])} for r in rows]
+            enabled = conn.execute(
+                "SELECT COUNT(*) c FROM alerts WHERE deleted = 0 AND enabled = 1").fetchone()["c"]
+            return {"enabled_count": enabled, "today": items}
+        finally:
+            conn.close()
 
     # ---------- 我的基金页 ----------
     def get_holdings(self):
@@ -397,6 +523,86 @@ class Api:
                 w.evaluate_js(f"window.__xltcOnData && window.__xltcOnData({js})")
         except Exception:
             pass
+
+
+# ====================== 首页市场会话（文案层） ======================
+# 判断逻辑全在 market_cal 引擎（session/is_trading_day/next_trade_date），
+# 本层只做"小白可读文案"翻译。口径 = 用户 2026-09-05 四题确认：
+#   trading→交易中 / preopen→未开盘 / closed→已收盘 / holiday+noon_break→休市
+#   us 开盘时间按夏令时/冬令时换算北京时间（今晚 21:30 / 22:30 开盘）；
+#   no_data（日历缺失）→ 无法判断，绝不猜测。
+_MARKET_NAMES = {"cn": "A股", "hk": "港股", "us": "美股"}
+_WEEK_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+
+def _price2_str(price_scaled):
+    """点位缩放整数 → 展示字符串 '4,548.05'（界面直接显示）"""
+    return format(cv.point_from_scaled(price_scaled), ",.2f")
+
+
+def _bj_hm(ny_dt):
+    """美东 datetime → 北京时间 HH:MM（DST 自动）"""
+    return mcal.bj_from_ny(ny_dt).strftime("%H:%M")
+
+
+def _market_sessions(conn):
+    """三市场会话组装（见 Api.get_market_sessions docstring）"""
+    now = datetime.datetime.now()
+    out, warnings, active = {}, [], []
+    for m in ("cn", "hk", "us"):
+        md = mcal.ny_from_beijing(now).date() if m == "us" else now.date()
+        t = mcal.is_trading_day(conn, m, md)
+        if t is None:  # 日历缺失（官方未公布的年份，如 A股 2027）→ 显式无法判断
+            out[m] = {"state": "no_data", "label": "无法判断", "date": md.isoformat(),
+                      "note": "官方交易日历尚未公布，联网后自动更新"}
+            warnings.append(f"{_MARKET_NAMES[m]} {md} 官方日历尚未公布，暂时无法判断交易状态")
+            continue
+        is_open, early_close = t
+        state, mdate, oa, ca = mcal.session(m, now, is_open, early_close)
+        label = {"trading": "交易中", "preopen": "未开盘", "closed": "已收盘",
+                 "noon_break": "休市", "holiday": "休市"}[state]
+        if m == "us":
+            oa_bj = _bj_hm(datetime.datetime.combine(md, datetime.time.fromisoformat(oa)))
+            ca_bj = _bj_hm(datetime.datetime.combine(md, datetime.time.fromisoformat(ca)))
+            if state == "trading":
+                note = f"北京时间 {ca_bj} 收盘"
+            elif state == "preopen":
+                note = f"今晚 {oa_bj} 开盘"  # 用户确认句式（夏令时 21:30 / 冬令时 22:30 自动）
+            elif state == "closed":
+                note = f"数据截至北京时间 {ca_bj}"
+            else:  # holiday（美股无午休）
+                nxt = mcal.next_trade_date(conn, m, md)
+                if nxt is None:
+                    note = "官方日历尚未公布"
+                else:
+                    nxt_bj = _bj_hm(datetime.datetime.combine(nxt, datetime.time.fromisoformat(oa)))
+                    note = f"下次开盘：{_WEEK_CN[nxt.weekday()]} {nxt_bj}"
+        else:
+            if state == "trading":
+                note = f"{ca} 收盘"
+            elif state == "noon_break":
+                note = f"午间休市 · {mcal.LUNCH[m][1]} 开盘"
+            elif state == "preopen":
+                note = f"{oa} 开盘"
+            elif state == "closed":
+                note = f"当日 {ca} 收盘"
+            else:  # holiday
+                nxt = mcal.next_trade_date(conn, m, md)
+                note = (f"下一交易日 {nxt:%m-%d}（{_WEEK_CN[nxt.weekday()]}）{oa} 开盘"
+                        if nxt else "官方日历尚未公布")
+        out[m] = {"state": state, "label": label, "note": note, "date": mdate,
+                  "is_open_day": bool(is_open)}
+        if state == "trading":
+            active.append(m)
+    order = active + [m for m in ("cn", "hk", "us") if m not in active]
+    # summary：一句话"现在市场整体状态"（首页 hero 备用）
+    if active:
+        summary = " · ".join(f"{_MARKET_NAMES[m]}交易中" for m in order if m in active) + \
+                  (" · 其余市场休市/未开盘" if len(active) < 3 else "")
+    else:
+        summary = "市场均已收盘或休市，显示最近一次收盘数据"
+    return {"checked_at": dbm.now_str(), "order": order, "markets": out,
+            "summary": summary, "warnings": warnings}
 
 
 def _clean_codes(codes):

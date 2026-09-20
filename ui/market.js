@@ -1,120 +1,320 @@
 /* ==========================================================
-   小财通 · 市场时段感知（原型演示）
-   方案：分区固定 + 自动排序 —— 重点市场放大，其他市场保留
-   原型用"时段模拟器"演示不同时间的首页变化；
-   正式版按真实市场日历（节假日+夏令时）自动判断，无需手动选择。
-   ========================================================== */
-
+ * 首页「市场速览」数据驱动脚本（2026-09-05 改造）
+ *
+ * 真实数据来源（全部本机 Python 侧计算，界面只做展示）：
+ *   get_market_sessions()  三市场交易状态（交易日历统一服务）
+ *   get_market_quotes(码)  8 只真实指数行情（腾讯主源→新浪备用）
+ *   get_holdings()         资产总览（真实持仓，SQLite）
+ *   get_today_alerts()     今日提醒（真实触发记录；无则空态）
+ *
+ * 设计口径（用户已确认）：
+ *   - 所有指数必须是真实行情；某指数暂不可用 → 显示"暂不可用"
+ *   - 交易中的市场排在最前（时段感知自动排序），其余按固定顺序
+ *   - 状态徽标：交易中=品牌色、未开盘=橙色提醒、已收盘/休市=中性灰
+ *   - 行情时间/获取时间/来源可悬停查看（title）
+ *   - 交易时段内每 5 分钟自动刷新一次行情
+ * ========================================================== */
 (function () {
-  var btn = document.getElementById('sessionBtn');
-  if (!btn) return;
+  'use strict';
 
-  var SESSIONS = [
-    { key: 'ashare',  label: 'A股交易中',   desc: '工作日 9:30-11:30 · 13:00-15:00' },
-    { key: 'closed',  label: 'A股已收盘',   desc: '15:00 后 · 基金净值晚间更新' },
-    { key: 'uspre',   label: '美股盘前',    desc: '美东 4:00-9:30（夏令时 16:00-21:30 北京时间）' },
-    { key: 'usopen',  label: '美股交易中',  desc: '美东 9:30-16:00（夏令时 21:30-次日4:00 北京时间）' },
-    { key: 'uspast',  label: '美股盘后',    desc: '美东 16:00-20:00（夏令时 4:00-8:00 北京时间）' },
-    { key: 'weekend', label: '周末休市',    desc: '周六日 A股/港股/美股均休市' }
-  ];
-
-  /* 每个市场行在不同时段的状态（正式版由市场日历自动计算） */
-  var STATUS = {
-    ashare: { sh: ['live', '交易中'], sz: ['live', '交易中'], hk: ['live', '交易中'], us: ['', '未开盘'], fund: ['更新中', '今日净值 20:00 后更新，当前显示昨日净值'] },
-    closed: { sh: ['', '已收盘'],     sz: ['', '已收盘'],     hk: ['', '已收盘'],     us: ['', '未开盘'], fund: ['done', '今日净值已更新 · 我的基金今日 +0.40%'] },
-    uspre:  { sh: ['', '已收盘'],     sz: ['', '已收盘'],     hk: ['', '已收盘'],     us: ['warn', '盘前'], fund: ['done', '今日净值已更新'] },
-    usopen: { sh: ['', '已收盘'],     sz: ['', '已收盘'],     hk: ['', '已收盘'],     us: ['live', '交易中'], fund: ['done', '今日净值已更新'] },
-    uspast: { sh: ['', '已收盘'],     sz: ['', '已收盘'],     hk: ['', '已收盘'],     us: ['warn', '盘后'], fund: ['done', '今日净值已更新'] },
-    weekend:{ sh: ['', '休市'],       sz: ['', '休市'],       hk: ['', '休市'],       us: ['', '休市'], fund: ['done', '今日为周末，净值以周五为准'] }
+  var MARKET_NAMES = { cn: 'A股', hk: '港股', us: '美股' };
+  var MARKET_TIPS = {
+    cn: 'A股 · 09:30–11:30 / 13:00–15:00',
+    hk: '港股 · 09:30–12:00 / 13:00–16:10',
+    us: '美股 · 北京时间 21:30 / 22:30 开盘（按夏令时自动）'
+  };
+  var STATUS_BADGE = {   // 状态 → 徽标样式类
+    trading: 'live', preopen: 'warn', noon_break: 'warn',
+    closed: '', holiday: '', no_data: ''
   };
 
-  /* 每个时段放大的市场行（primary）：sh/sz → A股，us → 美股 */
-  var PRIMARY = {
-    ashare:  ['sh', 'sz'],
-    closed:  ['sh', 'sz'],
-    uspre:   ['us'],
-    usopen:  ['us'],
-    uspast:  ['us'],
-    weekend: []
-  };
-
-  var heroText = {
-    ashare:  'A股交易中 · 重点看这里',
-    closed:  'A股已收盘 · 看收盘表现和基金净值',
-    uspre:   '美股盘前 · 今晚重点',
-    usopen:  '美股交易中 · 重点看这里',
-    uspast:  '美股盘后 · 收尾阶段',
-    weekend: '周末全球休市 · 看看周五收盘'
-  };
-
-  /* ---------- 构建时段模拟面板 ---------- */
-  var panel = document.createElement('div');
-  panel.className = 'appearance-panel sim-panel';
-
-  var items = SESSIONS.map(function (s) {
-    return '<button class="ap-mode sim-session" data-key="' + s.key + '" type="button">' + s.label +
-      '<span class="ap-hint" style="display:block;margin-top:2px;">' + s.desc + '</span></button>';
-  }).join('');
-
-  panel.innerHTML =
-    '<div class="ap-head">⏱ 模拟时段<span class="ap-head-note">原型演示 · 正式版自动判断</span></div>' +
-    '<div class="ap-sec">选择要模拟的时段，查看首页变化</div>' +
-    '<div class="ap-sim-list">' + items + '</div>';
-
-  document.body.appendChild(panel);
-
-  var sessionBtns = panel.querySelectorAll('.sim-session');
-
-  /* ---------- 应用时段 ---------- */
-  function currentKey () {
-    return localStorage.getItem('xltc-session') || 'ashare';
+  /* ---------- 调用 Python 接口（与我的基金页同一套） ---------- */
+  function call (name) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var api = window.pywebview && window.pywebview.api;
+    if (!api) return Promise.reject(new Error('本机数据服务尚未就绪，请稍等几秒再试。'));
+    return api[name].apply(null, args);
   }
 
-  function apply (key) {
-    var st = STATUS[key];
-    var rows = document.querySelectorAll('.mkt-row');
-    rows.forEach(function (row) {
-      var mkt = row.dataset.mkt;
-      var p = PRIMARY[key].indexOf(mkt) !== -1;
-      row.classList.toggle('primary', p);
-      var stEl = row.querySelector('.mkt-status');
-      if (stEl && st[mkt]) {
-        stEl.className = 'mkt-status' + (st[mkt][0] ? ' ' + st[mkt][0] : '');
-        stEl.textContent = st[mkt][1];
-      }
-    });
-    var fund = document.querySelector('.fund-note');
-    if (fund && st.fund) {
-      var dot = fund.querySelector('.dot');
-      var b = fund.querySelector('b');
-      var p = fund.querySelector('p');
-      dot.className = 'dot' + (st.fund[0] === 'done' ? ' done' : '');
-      b.textContent = st.fund[0] === 'done' ? '净值已更新' : '净值更新中';
-      p.textContent = st.fund[1];
-    }
+  /* ---------- 显示工具 ---------- */
+  function money (c) {            // 无符号金额（分→'35,907.53'）
+    if (c === null || c === undefined) return '—';
+    var neg = c < 0;
+    var a = Math.abs(c);
+    var y = Math.floor(a / 100);
+    var f = ('0' + (a % 100)).slice(-2);
+    return (neg ? '-' : '') + y.toLocaleString('zh-CN') + '.' + f;
+  }
+  function moneySign (c) {        // 带符号：+23,456.70 / -7,092.47
+    if (c === null || c === undefined) return '—';
+    return (c >= 0 ? '+' : '-') + money(Math.abs(c));
+  }
+  function isPlus (s) {           // 兼容数字与字符串（纪律同 funds.html）
+    if (typeof s === 'number') return s >= 0;
+    return !s || s === '' || s.charAt(0) !== '-';
+  }
+  function upDown (s) { return isPlus(s) ? 'up' : 'down'; }
+  function esc (s) { return String(s === null || s === undefined ? '' : s); }
+
+  var state = { sessions: null, quotes: [] };
+
+  /* 首页 8 只真实指数（用户 2026-09-05 确认清单；恒生科技留作盯盘提醒预设，不进首页） */
+  var HOME_CODES = ['sh000300', 'sh000001', 'sh000905', 'sz399006',
+                    'hkHSI', 'usSPX', 'usNDX', 'usDJI'];
+
+  /* ---------- 顶部问候（按时段变化；与数据库无关，纯本地时间） ---------- */
+  (function greeting () {
+    var h = new Date().getHours();
+    var el = document.getElementById('greeting');
+    if (h >= 5 && h < 12) el.textContent = '早上好 👋';
+    else if (h >= 12 && h < 18) el.textContent = '下午好 👋';
+    else el.textContent = '晚上好 👋';
+  })();
+
+  /* ---------- 渲染：三市场状态条 ---------- */
+  function marketOf (q) {         // 指数行 → 所属市场
+    if (q.market === 'cn' || q.market === 'hk' || q.market === 'us') return q.market;
+    return String(q.code).startsWith('hk') ? 'hk'
+      : String(q.code).startsWith('us') ? 'us' : 'cn';
+  }
+
+  function renderSessions () {
+    var s = state.sessions;
+    if (!s) return;
+    var box = document.getElementById('mktSessions');
+    box.innerHTML = s.order.map(function (m) {
+      var x = s.markets[m];
+      var cls = STATUS_BADGE[x.state] || '';
+      return '<span class="mkt-session-chip ' + cls + '" title="' + MARKET_TIPS[m] + '">' +
+        MARKET_NAMES[m] + ' · ' + x.label + '</span>';
+    }).join('');
     var hero = document.getElementById('sessionHero');
-    if (hero) hero.textContent = heroText[key];
-    var label = document.getElementById('sessionLabel');
-    if (label) label.textContent = '正在模拟：' + (SESSIONS.filter(function (s) { return s.key === key; })[0] || {}).label;
-    localStorage.setItem('xltc-session', key);
-    sessionBtns.forEach(function (b) { b.classList.toggle('active', b.dataset.key === key); });
-    btn.textContent = '⏱ ' + (SESSIONS.filter(function (s) { return s.key === key; })[0] || {}).label;
+    if (s.summary) hero.textContent = s.summary; else hero.textContent = '—';
+    // 警告（如某年官方日历未公布）暂存，由脚注统一展示（不打断页面）
+    state.warningMsg = (s.warnings && s.warnings.length) ? s.warnings[0] : '';
   }
 
-  /* ---------- 事件 ---------- */
-  btn.addEventListener('click', function (e) {
-    e.stopPropagation();
-    panel.classList.toggle('open');
-  });
-  panel.addEventListener('click', function (e) {
-    e.stopPropagation();
-  });
-  sessionBtns.forEach(function (b) {
-    b.addEventListener('click', function () {
-      apply(b.dataset.key);
-      panel.classList.remove('open');
-    });
-  });
+  /* ---------- 渲染：8 只指数（按会话顺序 + 重点放大） ---------- */
+  function tipFor (q) {
+    if (!q.available) return '暂无可用行情：网络连接后自动更新';
+    return '行情时间 ' + (q.quote_time || '—') + ' · 本机获取于 ' +
+      (q.fetched_at || '—') + ' · 来源 ' + q.source_label;
+  }
 
-  apply(currentKey());
+  function rowHTML (q, primary) {
+    var val, pct;
+    if (q.available) {
+      val = '<b class="num ' + upDown(q.pct_str) + '">' + esc(q.price_str) + '</b>' +
+        '<span class="num ' + upDown(q.pct_str) + '">' + esc(q.pct_str) + '%</span>';
+    } else {
+      val = '<b class="num">—</b><span>暂不可用</span>';
+    }
+    return '<div class="mkt-row' + (primary ? ' primary' : q.available ? '' : ' unavailable') + '">' +
+      '<div class="mkt-name">' + esc(q.name) + '<small>' +
+      (q.available ? '昨收 ' + esc(q.prev_str || '—') : '本机暂无行情记录') + '</small></div>' +
+      '<div class="mkt-val">' + val + '</div>' +
+      '<span class="mkt-status" title="' + tipFor(q) + '"></span>' +
+      '</div>';
+  }
+
+  function renderQuotes () {
+    var s = state.sessions;
+    var qs = state.quotes;
+    if (!qs.length) return;
+    var order = s && s.order.length ? s.order : ['cn', 'hk', 'us'];
+    // 分组：cn/hk/us → 组内保持原顺序（market_meta.display_order）
+    var groups = { cn: [], hk: [], us: [] };
+    qs.forEach(function (q) { var m = marketOf(q); if (groups[m]) groups[m].push(q); });
+    var flat = [];
+    order.forEach(function (m) { flat = flat.concat(groups[m] || []); });
+    // 重点市场（排最前的市场）前 2 只放大显示
+    var leadM = order[0];
+    var leadSeen = 0;
+    var html = flat.map(function (q) {
+      var primary = q.market === leadM && leadSeen < 2;
+      if (q.market === leadM) leadSeen++;
+      return rowHTML(q, primary);
+    }).join('');
+    var list = document.getElementById('mktList');
+    list.innerHTML = html;
+    // 每行行尾补市场状态徽标（交易中=品牌色/未开盘=橙/休市收盘=中性）
+    var mkts = s.markets;
+    var rows = list.querySelectorAll('.mkt-row');
+    for (var i = 0; i < rows.length; i++) {
+      var st = mkts[marketOf(flat[i])];
+      var tag = rows[i].querySelector('.mkt-status');
+      if (st) {
+        tag.textContent = st.label;
+        var cls = STATUS_BADGE[st.state] || '';
+        if (cls) tag.classList.add(cls);
+        if (st.note) tag.title = (tag.title || '') + ' · ' + st.note;
+      } else {
+        tag.textContent = '—';
+      }
+    }
+  }
+
+  /* ---------- 渲染：底部数据时间（行情时刻 + 本机获取时间） ---------- */
+  function renderFoot () {
+    var s = state.sessions;
+    var qs = state.quotes.filter(function (q) { return q.available; });
+    if (!qs.length || !s) { document.getElementById('mktFoot').hidden = true; return; }
+    var latest = qs.reduce(function (a, b) {
+      return (!a || (b.quote_time && b.quote_time > a.quote_time)) ? b : a;
+    }, null);
+    var el = document.getElementById('mktFoot');
+    el.hidden = false;
+    document.getElementById('mktFootB').textContent =
+      '最新行情 ' + (latest.quote_time || '—') + '（北京时间）';
+    document.getElementById('mktFootP').textContent =
+      '本机数据获取于 ' + (latest.fetched_at || '—') + ' · 休市时显示最近一次收盘数据 · 数据仅供参考' +
+      (state.warningMsg ? ' · ' + state.warningMsg : '');
+  }
+
+  /* ---------- 渲染：资产总览（真实持仓汇总）
+     视觉与已验收首页一致：资产卡收益用普通字色（asset-hero 不红绿），
+     红涨绿跌只用于市场行情行。金额全在 Python 侧算好，界面只显示。 ---------- */
+  function renderHero (summary, holdingCount, lastFetchAt) {
+    var none = summary.total_cents === null || summary.total_cents === undefined;
+    document.getElementById('heroTotal').textContent = none ? '—' : '¥ ' + money(summary.total_cents);
+    var today = document.getElementById('heroToday');
+    if (summary.today_profit_cents === null || summary.today_profit_cents === undefined) {
+      today.textContent = '—';
+    } else {
+      today.textContent = moneySign(summary.today_profit_cents) +
+        (summary.today_pct_str ? '（' + summary.today_pct_str + '%）' : '');
+    }
+    document.getElementById('heroProfit').textContent =
+      summary.profit_cents === null || summary.profit_cents === undefined
+        ? '—' : moneySign(summary.profit_cents);
+    document.getElementById('heroRate').textContent =
+      summary.profit_pct_str ? summary.profit_pct_str + '%' : '—';
+    document.getElementById('heroCount').textContent = holdingCount + ' 只';
+    // 底部提示行：无持仓 → 引导添加；有持仓 → 显示最近一次真实净值获取时间
+    var foot = document.getElementById('heroFoot');
+    if (!holdingCount) {
+      foot.innerHTML = '还没有持仓：<a href="funds.html">去添加你持有的基金</a>';
+      return;
+    }
+    foot.textContent = lastFetchAt ? '净值数据更新于 ' + lastFetchAt : '';
+  }
+
+  /* ---------- 渲染：今日提醒（真实空态） ---------- */
+  function renderAlerts (d) {
+    var box = document.getElementById('alertList');
+    if (!d.today.length) {
+      box.innerHTML =
+        '<div class="alert-empty"><b>' +
+        (d.enabled_count ? '今天没有触发的提醒' : '还没有设过提醒') + '</b>' +
+        '<p>达到你设置的条件才会提醒你，平时保持安静' +
+        (d.enabled_count ? '。' : '：去「盯盘提醒」设一个试试。') + '</p></div>';
+      return;
+    }
+    box.innerHTML = d.today.map(function (a) {
+      var text = a.obj_name ? esc(a.obj_name) + ' ' : '';
+      text += a.note ? esc(a.note) : '达到了你设置的条件';
+      return '<div class="alert-item"><span class="alert-dot orange"></span>' +
+        '<div class="t"><b>' + text + '</b>' +
+        '<small class="time">触发于 ' + esc(a.triggered_at || '') + '</small></div></div>';
+    }).join('');
+  }
+
+  /* ---------- 刷新行情（按钮 / 自动）
+     后端在后台线程抓数，完成后发 marketQuotesUpdated 事件 → __xltcOnData → load()。
+     这里兜底等待：约 20 秒仍未收到完成事件（如事件桥异常）则强制重取一次。 ---------- */
+  var refreshing = false;
+  var evtCount = 0;   // 收到的 marketQuotesUpdated 事件数
+  function refreshQuotes (quiet) {
+    if (refreshing) return Promise.resolve(false);
+    refreshing = true;
+    var btn = document.getElementById('mktRefreshBtn');
+    if (btn) btn.classList.add('busy');
+    var c0 = evtCount;
+    return call('refresh_market_quotes').then(function () {
+      return new Promise(function (resolve) {
+        var waited = 0;
+        var poll = setInterval(function () {
+          waited += 1000;
+          if (evtCount > c0 || waited >= 20000) {  // 事件已到 或 超时兜底
+            clearInterval(poll);
+            resolve(true);
+          }
+        }, 1000);
+      });
+    }).catch(function () {
+      return false;
+    }).then(function (ok) {
+      refreshing = false;
+      if (btn) btn.classList.remove('busy');
+      if (!ok) { if (!quiet) noteErr(); return false; }
+      if (evtCount === c0) load().catch(function () {});  // 事件未到（超时兜底）才主动取数
+      return true;
+    });
+  }
+  function noteErr () {
+    var w = document.getElementById('mktFoot');
+    w.hidden = false;
+    document.getElementById('mktFootB').textContent = '行情刷新失败';
+    document.getElementById('mktFootP').textContent = '网络可能不可用：本机仍保留最近一次成功获取的行情，可稍后重试。';
+  }
+
+  /* ---------- 取数 ---------- */
+  function load () {
+    return Promise.all([
+      call('get_market_sessions'),
+      call('get_market_quotes', HOME_CODES),
+      call('get_holdings'),
+      call('get_today_alerts')
+    ]).then(function (rs) {
+      state.sessions = rs[0];
+      state.quotes = rs[1].items;
+      renderSessions();
+      renderQuotes();
+      renderFoot();
+      renderHero(rs[2].summary || {}, (rs[2].holdings || []).length, rs[2].last_fetch_at);
+      renderAlerts(rs[3]);
+    });
+  }
+
+  /* ---------- 事件：数据更新（Python 完成刷新后通知） ----------
+     事件到达 → 重取一次；refreshQuotes 的 then 只在超时兜底时补取，
+     两者互补，不会双跑（事件驱动 = 主路径，超时 = 保险丝）。 */
+  window.__xltcOnData = function (d) {
+    if (d && d.type === 'marketQuotesUpdated') {
+      evtCount++;
+      load().catch(function () {});
+    }
+  };
+
+  /* ---------- 事件：刷新按钮 + 5 分钟自动刷新 ---------- */
+  document.getElementById('mktRefreshBtn').addEventListener('click', function () {
+    refreshQuotes(false);
+  });
+  // 交易时段内每 5 分钟自动刷新；非交易时段不打扰（行情是快照，收盘后不变化）
+  setInterval(function () {
+    var s = state.sessions;
+    var trading = s && s.order.length && s.markets[s.order[0]] &&
+      s.markets[s.order[0]].state === 'trading';
+    if (trading) refreshQuotes(true);
+  }, 5 * 60 * 1000);
+
+  /* ---------- 启动：等 pywebview 的 js_api 就绪（与我的基金页同一套） ---------- */
+  var readyTries = 0;
+  var readyTimer = setInterval(function () {
+    if (window.pywebview && window.pywebview.api) {
+      clearInterval(readyTimer);
+      load().catch(function () {
+        var w = document.getElementById('mktFoot');
+        w.hidden = false;
+        document.getElementById('mktFootB').textContent = '读取数据失败';
+        document.getElementById('mktFootP').textContent = '本机数据库可能尚未初始化，请重启小财通后重试。';
+      });
+    } else if (++readyTries > 100) {
+      clearInterval(readyTimer);
+      var list = document.getElementById('mktList');
+      if (list) list.innerHTML =
+        '<div class="alert-empty"><b>无法连接本机数据服务</b>' +
+        '<p>请通过「启动小财通」运行本软件；若已在运行仍出现此提示，请关闭软件后重新打开。</p></div>';
+    }
+  }, 100);
 }());

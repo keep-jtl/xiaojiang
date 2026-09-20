@@ -81,6 +81,23 @@ CREATE TABLE IF NOT EXISTS market_quotes (
     FOREIGN KEY (mkt_code) REFERENCES market_meta(code) ON DELETE CASCADE
 );
 
+-- 11. 交易日历（三市场统一，2026-09-05 用户拍板的统一底层服务）
+-- 判断依据 = 各交易所实际开市日（官方已公布），绝不按"工作日"猜测；
+-- 存全量（含休市日）：查不到行 = 日历缺失 → 显式报错，绝不当作休市
+CREATE TABLE IF NOT EXISTS market_calendar (
+    market      TEXT NOT NULL,               -- 市场：cn=A股 / hk=港股 / us=美股（美股=美东日期）
+    trade_date  TEXT NOT NULL,               -- 该市场本地日期 YYYY-MM-DD（美股勿用北京日期）
+    is_open     INTEGER NOT NULL CHECK (is_open IN (0,1)),
+                                              -- 1=交易日 0=休市日
+    early_close TEXT,                        -- 提前收盘 HH:MM（本地口径）：港股半天='12:00'，
+                                              -- 美股黑五='13:00'（美东）；NULL=正常收盘
+    source      TEXT NOT NULL,               -- builtin=内置官方确认 / sina=新浪 / ics1823=香港政府
+                                              -- / rule_nyse=纽交所规则生成 / manual=补丁
+    fetched_at  TEXT NOT NULL,               -- 写入时刻（本地时间）
+    PRIMARY KEY (market, trade_date)
+);
+CREATE INDEX IF NOT EXISTS ix_market_calendar ON market_calendar(market, trade_date);
+
 -- ============ 二、用户数据（将来云同步范围） ============
 
 -- 3. 我的持仓主表（持仓/仅关注/已清仓同表，status 区分；记录与复盘同处一行）
@@ -264,11 +281,16 @@ def init_db():
         conn.execute("PRAGMA journal_mode = WAL")  # 读写互不阻塞
         conn.executescript(SCHEMA_SQL)
         now = now_str()
-        # 程序元数据种子
-        conn.execute(
-            "INSERT OR IGNORE INTO app_meta (key, value, updated_at) VALUES (?, ?, ?)",
-            ("schema_version", "2", now),
-        )
+        # 程序元数据种子（schema_version 升级：v2 → v3 新增第 11 张表 market_calendar，
+        # 表结构由上方 executescript 的 IF NOT EXISTS 自动补齐，无需逐库迁移脚本）
+        cur_ver = conn.execute("SELECT value FROM app_meta WHERE key = 'schema_version'").fetchone()
+        ver = int(cur_ver["value"]) if cur_ver else 0
+        if ver < 3:
+            conn.execute(
+                "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '3', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = '3', updated_at = excluded.updated_at",
+                (now,),
+            )
         conn.execute(
             "INSERT OR IGNORE INTO app_meta (key, value, updated_at) VALUES (?, ?, ?)",
             ("db_created_at", now, now),
