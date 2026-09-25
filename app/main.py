@@ -15,9 +15,8 @@ import threading
 import webview
 
 from . import db as dbm
-from . import market_cal as mcal
+from . import refresher
 from .api import Api
-from .sources import market_quotes as mq
 
 UI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
 START_PAGE = "funds.html"  # 当前开发中的页面；全部完成后再做应用内起始页路由
@@ -38,33 +37,14 @@ class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     allow_reuse_address = True
 
 
-def _boot_background():
-    """启动后台任务（不阻塞窗口打开）：
-    1) 交易日历：内置已确认年份直接入库（保证离线也正确）；
-       官方公布期（每年 11 月后）联网补次年，失败静默保留旧日历；
-    2) 首轮市场行情：腾讯→新浪→入库，失败静默（下次打开再补），
-       任何一步出错都不影响主程序启动。"""
-    try:
-        conn = dbm.connect()
-        try:
-            mcal.ensure_calendar(conn)  # 幂等：首次启动导入内置，此后只按需联网
-        finally:
-            conn.close()
-        conn = dbm.connect()
-        try:
-            codes = [r["code"] for r in conn.execute(
-                "SELECT code FROM market_meta WHERE enabled = 1").fetchall()]
-            if codes:
-                mq.refresh_market_quotes(conn, codes)
-        finally:
-            conn.close()
-    except Exception as e:
-        print(f"[main] 启动后台任务异常（不影响主程序）: {e}")
-
-
 def main():
     dbm.init_db()  # 建库建表 + 种子（幂等）
-    threading.Thread(target=_boot_background, daemon=True).start()
+
+    api = Api()
+    # 统一后台刷新器（2026-09-25）：启动立即检查一次（日历 + 净值 + 行情），
+    # 之后每 10 分钟一次；常驻守护线程，任何一步失败都不影响主程序启动。
+    # 以前这里是"一次性启动任务"，现在收敛到统一刷新器，避免多处各刷各的。
+    refresher.start(api, notify=api._notify_js)
 
     # 内置网页服务（127.0.0.1 随机端口，仅本机可访问）
     server = _Server(("127.0.0.1", 0), _QuietHandler)
@@ -75,7 +55,7 @@ def main():
     webview.create_window(
         "小财通",
         url,
-        js_api=Api(),
+        js_api=api,
         width=1280,
         height=860,
         min_size=(960, 640),

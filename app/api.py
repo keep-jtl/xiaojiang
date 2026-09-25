@@ -9,8 +9,9 @@
   份额/净值/百分比返回 Python Decimal 算好的展示字符串。
 - 净值"三要素"原则（2026-09-04 用户确认）：净值日期（哪天）、获取时间（何时
   抓到的）、数据来源（哪来的）必须区分清楚，不得让用户把抓取时刻当成实时价格；
-- 自动更新 = 检查缓存，需要才联网：每天最多自动尝试一次（app_meta.auto_refresh_date），
-  失败不清空/不覆盖旧数据、如实上报（事件 ok/failed），用户可手动重试。
+- 自动更新 = 检查本地状态，需要才联网。判定规则已统一收敛到 refresher 模块
+  （2026-09-25 起：按基金逐个判断时段/退避/次数，不再用全局"当天一次"标记）；
+  失败不清空/不覆盖旧数据，用户随时可手动重试。
 
 本文件按「我的基金」页改造起步提供接口，随逐页改造扩充。
 """
@@ -24,16 +25,13 @@ from decimal import Decimal, ROUND_HALF_UP
 from . import converters as cv
 from . import db as dbm
 from . import market_cal as mcal
+from . import refresher
+from .refresher import NAV_REFRESH_LOCK, QUOTE_REFRESH_LOCK
 from .sources import fund_list, fund_nav as src
 from .sources import market_quotes as mq
 
 # 持仓记录/复盘允许前端直接更新的文本字段白名单
 HOLDING_TEXT_FIELDS = {"buy_reason", "buy_judge", "watch_points", "remark"}
-
-# 净值刷新全局锁：后台自动刷新与手动刷新可能同时发生，而 akshare 底层 JS 引擎
-# （py_mini_racer/V8）线程不安全，并发调用会崩溃（2026-09-03 实测复现）。
-# 所有联网拉净值入口必须经此锁串行执行。
-NAV_REFRESH_LOCK = threading.Lock()
 
 # 页面显示用的数据源名称（source 字段存内部标识，展示名在此映射，换源时只改这里）
 SOURCE_LABELS = {"akshare": "天天基金（公开接口）", "manual": "手动建档",
@@ -112,12 +110,22 @@ class Api:
         return {"ok": True}
 
     def _quote_worker(self, codes):
-        conn = dbm.connect()
+        """行情刷新线程（统一刷新器与界面手动按钮共用）。
+
+        同一时刻只跑一轮：已经有一轮在跑时直接退出 —— 那一轮完成时会派发同样的
+        marketQuotesUpdated 事件，界面照样会更新，重复联网没有意义。
+        """
+        if not QUOTE_REFRESH_LOCK.acquire(blocking=False):
+            return
         try:
-            res = mq.refresh_market_quotes(conn, codes)
-            stale_codes = list(res["stale"].keys())
+            conn = dbm.connect()
+            try:
+                res = mq.refresh_market_quotes(conn, codes)
+                stale_codes = list(res["stale"].keys())
+            finally:
+                conn.close()
         finally:
-            conn.close()
+            QUOTE_REFRESH_LOCK.release()
         self._notify_js({"type": "marketQuotesUpdated", "ok": len(stale_codes) == 0,
                          "stale": stale_codes, "at": dbm.now_str()})
 
@@ -446,26 +454,22 @@ class Api:
 
     # ---------- 净值刷新（检查式自动更新 + 手动） ----------
     def maybe_auto_refresh(self, codes):
-        """打开页面时的自动更新入口：检查缓存，需要才联网（2026-09-04 用户确认）。
+        """打开页面时的自动更新入口：检查本地状态，需要才联网。
 
-        策略（MVP 一期简单可靠版）：同一自然日最多自动联网尝试一次
-        （app_meta.auto_refresh_date，无论成败都记，防反复失败重试打网络）；
-        次日打开页面会再次自动尝试。手动刷新不受此限制。
-        返回 {"ok": true, "skipped": bool, "reason": "today_done"|"no_holdings"|None}
+        判定已改为 **按基金逐个判断**（2026-09-25 用户确认，规则集中在 refresher 模块）：
+        app_meta.nav_refresh_state 里每只基金各自记录 slot/last_try/tries —— 某一只拿到
+        新净值不会阻止其他只继续检查（QDII 净值天然滞后，一刀切会把它锁死）。
+        打开页面时先做本地判断（快、不联网），确实有事要做才起后台线程。
+        手动刷新（refresh_all_nav）不受这些规则限制，随时可点。
+        返回 {"ok": true, "skipped": bool, "reason": "no_holdings"|"nothing_to_do"|None}
         """
         codes = _clean_codes(codes)
         if not codes:
             return {"ok": True, "skipped": True, "reason": "no_holdings"}
-        conn = dbm.connect()
-        try:
-            if dbm.get_app_meta(conn, "auto_refresh_date") == dbm.today_str():
-                return {"ok": True, "skipped": True, "reason": "today_done"}
-            dbm.set_app_meta(conn, "auto_refresh_date", dbm.today_str())  # 先占位防并发重复
-            conn.commit()  # 必须提交，否则连接关闭时回滚、当天可反复发起
-        finally:
-            conn.close()
-        threading.Thread(target=self._refresh_worker, args=(codes, "auto"), daemon=True).start()
-        return {"ok": True, "skipped": False}
+        result = refresher.refresh_nav(codes, notify=self._notify_js, mode="auto",
+                                       background=True)
+        return {"ok": True, "skipped": not result["started"],
+                "reason": None if result["started"] else "nothing_to_do"}
 
     def refresh_all_nav(self, codes, mode="manual"):
         """手动刷新（界面按钮）：立即后台联网更新，完成时派发 dataUpdated 事件"""
