@@ -2,10 +2,11 @@
  * 首页「市场速览」数据驱动脚本（2026-09-05 改造）
  *
  * 真实数据来源（全部本机 Python 侧计算，界面只做展示）：
- *   get_market_sessions()  三市场交易状态（交易日历统一服务）
- *   get_market_quotes(码)  8 只真实指数行情（腾讯主源→新浪备用）
- *   get_holdings()         资产总览（真实持仓，SQLite）
- *   get_today_alerts()     今日提醒（真实触发记录；无则空态）
+ *   get_market_sessions()   三市场交易状态（交易日历统一服务）
+ *   get_market_quotes(码)   8 只真实指数行情（腾讯主源→新浪备用）
+ *   get_holdings()          资产总览（真实持仓，SQLite）
+ *   get_today_alerts()      今日提醒（真实触发记录；无则空态）
+ *   maybe_auto_refresh(码)  打开首页时检查基金净值是否需更新（当天只联网一次）
  *
  * 设计口径（用户已确认）：
  *   - 所有指数必须是真实行情；某指数暂不可用 → 显示"暂不可用"
@@ -13,6 +14,9 @@
  *   - 状态徽标：交易中=品牌色、未开盘=橙色提醒、已收盘/休市=中性灰
  *   - 行情时间/获取时间/来源可悬停查看（title）
  *   - 交易时段内每 5 分钟自动刷新一次行情
+ *   - 打开首页时自动检查基金净值（与我基金页同一套后端逻辑，
+ *     当天只联网一次）；不新增界面元素：成功则卡片数字自然变新，
+ *     失败/无网络静默保留旧数据，不弹提示
  * ========================================================== */
 (function () {
   'use strict';
@@ -56,7 +60,7 @@
   function upDown (s) { return isPlus(s) ? 'up' : 'down'; }
   function esc (s) { return String(s === null || s === undefined ? '' : s); }
 
-  var state = { sessions: null, quotes: [] };
+  var state = { sessions: null, quotes: [], holdingCodes: [] };
 
   /* 首页 8 只真实指数（用户 2026-09-05 确认清单；恒生科技留作盯盘提醒预设，不进首页） */
   var HOME_CODES = ['sh000300', 'sh000001', 'sh000905', 'sz399006',
@@ -268,6 +272,7 @@
     ]).then(function (rs) {
       state.sessions = rs[0];
       state.quotes = rs[1].items;
+      state.holdingCodes = (rs[2].holdings || []).map(function (h) { return h.fund_code; });
       renderSessions();
       renderQuotes();
       renderFoot();
@@ -276,12 +281,30 @@
     });
   }
 
+  /* ---------- 打开首页时的净值自动检查（2026-09-24 新增）
+     与我基金页同一套后端逻辑：后端用 app_meta 全库共享"今天已自动更新过"
+     标记，当天只联网一次，不会重复请求；单只基金失败不影响其他基金，
+     失败时库里旧净值原样保留（后端已保证），失败静默不打扰用户。
+     只在页面刚打开时检查一次，防止事件重取时来回触发。 ---------- */
+  var autoChecked = false;
+  function autoRefreshNavIfNeeded () {
+    if (autoChecked) return;
+    autoChecked = true;
+    if (!state.holdingCodes.length) return;   // 没有持仓：无需联网
+    call('maybe_auto_refresh', state.holdingCodes).catch(function () {});
+  }
+
   /* ---------- 事件：数据更新（Python 完成刷新后通知） ----------
      事件到达 → 重取一次；refreshQuotes 的 then 只在超时兜底时补取，
      两者互补，不会双跑（事件驱动 = 主路径，超时 = 保险丝）。 */
   window.__xltcOnData = function (d) {
-    if (d && d.type === 'marketQuotesUpdated') {
+    if (!d) return;
+    if (d.type === 'marketQuotesUpdated') {
       evtCount++;
+      load().catch(function () {});
+    } else if (d.type === 'dataUpdated') {
+      // 基金净值更新完成（打开首页自动触发）：重取一次，资产卡数字同步变新。
+      // 失败（d.ok === false）也重取：拿到的仍是库中保留的旧净值，显示不变。
       load().catch(function () {});
     }
   };
@@ -303,7 +326,9 @@
   var readyTimer = setInterval(function () {
     if (window.pywebview && window.pywebview.api) {
       clearInterval(readyTimer);
-      load().catch(function () {
+      load().then(function () {
+        autoRefreshNavIfNeeded();   // 先出画面，再检查净值是否需要更新（不阻塞首屏）
+      }).catch(function () {
         var w = document.getElementById('mktFoot');
         w.hidden = false;
         document.getElementById('mktFootB').textContent = '读取数据失败';
