@@ -28,6 +28,8 @@ env/
 *.sqlite
 *.sqlite3
 data/user_data/
+# 数据库备份目录：整目录忽略（含 .db / .zip / 任何将来新增的备份格式）
+data/backup/
 
 # ---------- 日志 ----------
 *.log
