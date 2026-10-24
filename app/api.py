@@ -389,27 +389,96 @@ class Api:
             return {"items": [], "offline": True}
 
     # ---------- 持仓操作 ----------
-    def add_holding(self, payload):
-        """添加一笔持仓（已验收流程：搜索/手动填 → 本金+份额 → 记录可选）
+    def get_fund_snapshot(self, code):
+        """选中基金后取“最近公布的真实净值”，供添加表单预览。
 
-        payload: {fund_code, name(建档用), fund_type, cost_yuan, shares,
+        - 本地缓存已经是今天的净值 → 直接用，不再联网；
+        - 否则同步联网刷新一次（与手动刷新同一把锁）；失败则回退到本地已有净值；
+        - 两者都没有 → 明确返回失败，绝不返回虚构数字。
+        返回 {ok, nav_str, nav_date, fetched_at, source, stale_warning?}
+        """
+        code = str(code or "").strip()
+        if not code:
+            return {"ok": False, "error": "基金代码为空"}
+
+        conn = dbm.connect()
+        try:
+            cached = src.latest_nav(conn, code)
+        finally:
+            conn.close()
+
+        warning = None
+        if not (cached and cached["nav_date"] == dbm.today_str()):
+            r = self.refresh_nav(code)
+            if not r.get("ok"):
+                warning = r.get("error") or "联网获取净值失败"
+            conn = dbm.connect()
+            try:
+                cached = src.latest_nav(conn, code)
+            finally:
+                conn.close()
+
+        if cached is None:
+            return {"ok": False, "error": warning or "暂时没有该基金的真实净值"}
+        out = {
+            "ok": True,
+            "nav_str": str(cv.nav_from_scaled(cached["unit_nav_scaled"])),
+            "nav_date": cached["nav_date"],
+            "fetched_at": cached["fetched_at"],
+            "source": SOURCE_LABELS.get(cached["source"], cached["source"]),
+        }
+        if warning:
+            out["stale_warning"] = warning
+        return out
+
+    def add_holding(self, payload):
+        """添加一笔持仓（2026-10-21 起表单改为“成本价 + 份额”，后端仍存总本金）
+
+        payload: {fund_code, name(建档用), fund_type,
+                  cost_price(元/份) 或 cost_yuan(总本金，兼容旧调用), shares,
                   open_date 'YYYY-MM-DD', tag 'heavy|normal|watch',
                   buy_reason, buy_judge, watch_points, remark}
-        无金额无份额 → 存为仅关注(watch)；否则存为持有(holding)。
-        返回 {"ok": true, "id": ..} 或 {"ok": false, "error": ".."}；净值拉取后台自动进行。
+        - cost_price × shares → 总本金（分，ROUND_HALF_UP），写入 holdings.cost_cents；
+          数据库字段含义不变，已有收益计算/清仓/流水全部复用。
+        - 无金额无份额 → 存为仅关注(watch)；否则存为持有(holding)。
+        - 返回 {"ok": true, "id": ..} 或 {"ok": false, "error": ".."}；净值拉取后台自动进行。
         """
         try:
             code = str(payload.get("fund_code", "")).strip()
             if not code:
                 return {"ok": False, "error": "基金代码不能为空"}
             cost_yuan = payload.get("cost_yuan")
+            cost_price = payload.get("cost_price")
             shares = payload.get("shares")
             tag = payload.get("tag", "normal")
-            is_watch = not cost_yuan and not shares
+
+            has_cost = (cost_yuan not in (None, "")) or (cost_price not in (None, ""))
+            has_shares = shares not in (None, "")
+            is_watch = not has_cost and not has_shares
             cost_c = shares_s = None
             if not is_watch:
-                cost_c = cv.yuan_to_fen(cost_yuan)
+                if not has_shares:
+                    return {"ok": False, "error": "请填写持有份额"}
                 shares_s = cv.shares_to_scaled(shares)
+                if shares_s <= 0:
+                    return {"ok": False, "error": "持有份额必须大于 0"}
+
+                if cost_yuan not in (None, ""):
+                    # 兼容旧调用：直接给总本金（元）
+                    cost_c = cv.yuan_to_fen(cost_yuan)
+                elif cost_price not in (None, ""):
+                    # 新表单：持仓成本价（元/份）× 份额 → 总本金，按分四舍五入
+                    price = Decimal(str(cost_price))
+                    if price <= 0:
+                        return {"ok": False, "error": "持仓成本价必须大于 0"}
+                    total_yuan = (price * cv.shares_from_scaled(shares_s)).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    cost_c = cv.yuan_to_fen(str(total_yuan))
+                else:
+                    return {"ok": False, "error": "请填写持仓成本价"}
+
+                if cost_c <= 0:
+                    return {"ok": False, "error": "投入成本必须大于 0"}
             now = dbm.now_str()
             conn = dbm.connect()
             try:

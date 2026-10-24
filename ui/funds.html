@@ -168,11 +168,13 @@
     <div class="freq-note" style="margin-top:6px;" id="searchHint">输入关键词开始搜索；首次加载全市场基金名单需要联网几秒，之后即时出结果。</div>
     <div class="opt-list" id="optList"></div>
     <div class="m-sec">② 填写持有信息</div>
+    <div class="freq-note" id="navPreview" style="margin-bottom:8px;">选择基金后会自动获取最近公布的真实净值。</div>
     <div class="form-row">
-      <span>买入本金（元）</span><input type="number" id="costIn" min="0" placeholder="例如 10000">
-      <span>持有份额</span><input type="number" id="sharesIn" min="0" placeholder="例如 5000">
+      <span>持仓成本价（元/份）</span><input type="number" id="costPriceIn" min="0" step="0.0001" placeholder="例如 2.4378">
+      <span>持有份额</span><input type="number" id="sharesIn" min="0" step="0.0001" placeholder="例如 5000">
     </div>
-    <div class="freq-note">市值按「份额 × 最新净值」计算；买入时间默认今天。添加后软件自动联网获取这只基金的真实净值（首次约几秒到半分钟）。</div>
+    <div class="freq-note" id="calcPreview" style="margin-top:8px;">填写成本价和份额后，这里自动计算投入成本、当前市值和盈亏。</div>
+    <div class="freq-note">投入成本 = 成本价 × 份额；当前市值 = 份额 × 最新真实净值。保存的仍是“总投入成本”，与原有记账方式一致；买入时间默认今天。</div>
     <div class="m-foot">
       <button class="btn btn-ghost btn-sm" id="addCancelBtn">取消</button>
       <button class="btn btn-sm" id="addOkBtn" disabled>添加</button>
@@ -520,6 +522,8 @@
 
   /* ---------- 添加基金（真实全市场搜索） ---------- */
   var selected = null;          // 选中的基金 {code,name,fund_type}
+  var selectedNav = null;       // 选中基金的最新真实净值 {nav,navStr,date,source,warning}
+  var navError = null;          // 净值获取失败时的明确原因
   var heldCodes = [];           // 已持有的代码（搜索结果里标记不可选）
 
   function heldSet () {
@@ -528,18 +532,72 @@
 
   function addBtnOkState () {
     var okBtn = document.getElementById('addOkBtn');
-    okBtn.disabled = !(selected && parseFloat(document.getElementById('costIn').value) > 0 &&
+    okBtn.disabled = !(selected && parseFloat(document.getElementById('costPriceIn').value) > 0 &&
       parseFloat(document.getElementById('sharesIn').value) > 0);
+  }
+
+  /* 净值预览：只在拿到真实净值时显示数字；拿不到就明确说“没有”，绝不编 */
+  function renderNavPreview (state) {
+    var el = document.getElementById('navPreview');
+    if (!selected) {
+      el.innerHTML = '选择基金后会自动获取最近公布的真实净值。';
+      return;
+    }
+    if (state === 'loading') {
+      el.innerHTML = '正在获取「' + selected.name + '」的最新真实净值…';
+      return;
+    }
+    if (!selectedNav) {
+      el.innerHTML = '⚠ ' + (navError || '暂时没有获取到真实净值') +
+        '：无法预览当前市值和盈亏；保存后软件会继续尝试获取。';
+      return;
+    }
+    var t = '最新净值：<b class="num">' + selectedNav.navStr + '</b> · 净值日期 ' +
+      selectedNav.date + ' · 来源 ' + (selectedNav.source || '—');
+    if (selectedNav.warning) {
+      t += '<br><span style="color:var(--ink-3);">联网刷新失败，以上为本地最近一次真实净值。</span>';
+    }
+    el.innerHTML = t;
+  }
+
+  /* 实时预览：投入成本 = 成本价 × 份额；市值 = 份额 × 真实净值；盈亏 = 市值 − 成本 */
+  function renderCalcPreview () {
+    var el = document.getElementById('calcPreview');
+    var price = parseFloat(document.getElementById('costPriceIn').value);
+    var shares = parseFloat(document.getElementById('sharesIn').value);
+    if (!(price > 0) || !(shares > 0)) {
+      el.innerHTML = '填写成本价和份额后，这里自动计算投入成本、当前市值和盈亏。';
+      return;
+    }
+    var costC = Math.round(price * shares * 100);
+    var t = '投入成本：<b class="num">¥ ' + money(costC) + '</b>';
+    if (!selectedNav) {
+      t += ' · 当前市值：<span style="color:var(--ink-3);">暂无真实净值，无法计算</span>';
+      el.innerHTML = t;
+      return;
+    }
+    var mvC = Math.round(selectedNav.nav * shares * 100);
+    var profit = mvC - costC;
+    var pct = costC > 0 ? profit / costC * 100 : 0;
+    var pctStr = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+    t += ' · 当前市值：<b class="num">¥ ' + money(mvC) + '</b>' +
+      ' · 盈亏：<b class="num ' + upDown(pctStr) + '">' + moneySign(profit) +
+      '（' + pctStr + '）</b>';
+    el.innerHTML = t;
   }
 
   document.getElementById('addBtn').addEventListener('click', function () {
     selected = null;
+    selectedNav = null;
+    navError = null;
     heldSet();
     document.getElementById('searchIn').value = '';
-    document.getElementById('costIn').value = '';
+    document.getElementById('costPriceIn').value = '';
     document.getElementById('sharesIn').value = '';
     document.getElementById('searchHint').style.display = '';
     document.getElementById('optList').innerHTML = '';
+    renderNavPreview();
+    renderCalcPreview();
     addBtnOkState();
     document.getElementById('addModal').classList.add('open');
     setTimeout(function () { document.getElementById('searchIn').focus(); }, 50);
@@ -586,16 +644,46 @@
     var o = e.target.closest('.opt');
     if (!o || o.classList.contains('held')) return;
     selected = { code: o.dataset.code, name: o.dataset.name, fund_type: o.dataset.type };
+    selectedNav = null;
+    navError = null;
     this.querySelectorAll('.opt').forEach(function (x) { x.classList.toggle('sel', x === o); });
+    renderNavPreview('loading');
+    renderCalcPreview();
     addBtnOkState();
+
+    var code = selected.code;
+    call('get_fund_snapshot', code).then(function (d) {
+      if (!selected || selected.code !== code) return;   // 期间改选了别的基金
+      if (d && d.ok) {
+        selectedNav = {
+          nav: parseFloat(d.nav_str), navStr: d.nav_str, date: d.nav_date,
+          source: d.source, warning: d.stale_warning || null
+        };
+      } else {
+        selectedNav = null;
+        navError = (d && d.error) || '暂时没有获取到真实净值';
+      }
+      renderNavPreview();
+      renderCalcPreview();
+    }).catch(function () {
+      if (!selected || selected.code !== code) return;
+      selectedNav = null;
+      navError = '获取真实净值失败';
+      renderNavPreview();
+      renderCalcPreview();
+    });
   });
 
-  document.getElementById('costIn').addEventListener('input', addBtnOkState);
-  document.getElementById('sharesIn').addEventListener('input', addBtnOkState);
+  document.getElementById('costPriceIn').addEventListener('input', function () {
+    addBtnOkState(); renderCalcPreview();
+  });
+  document.getElementById('sharesIn').addEventListener('input', function () {
+    addBtnOkState(); renderCalcPreview();
+  });
 
   document.getElementById('addOkBtn').addEventListener('click', function () {
     if (!selected) { alert('请先在搜索结果中点选一只基金'); return; }
-    var cost = document.getElementById('costIn').value;
+    var costPrice = document.getElementById('costPriceIn').value;
     var shares = document.getElementById('sharesIn').value;
     var today = new Date();
     var iso = today.getFullYear() + '-' + ('0' + (today.getMonth() + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
@@ -603,7 +691,7 @@
     btn.disabled = true;
     call('add_holding', {
       fund_code: selected.code, name: selected.name, fund_type: selected.fund_type,
-      cost_yuan: cost, shares: shares, open_date: iso, tag: 'normal'
+      cost_price: costPrice, shares: shares, open_date: iso, tag: 'normal'
     }).then(function (r) {
       if (r.ok) {
         document.getElementById('addModal').classList.remove('open');
