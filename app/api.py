@@ -37,6 +37,22 @@ HOLDING_TEXT_FIELDS = {"buy_reason", "buy_judge", "watch_points", "remark"}
 SOURCE_LABELS = {"akshare": "天天基金（公开接口）", "manual": "手动建档",
                  "tencent": "腾讯行情", "sina": "新浪行情"}
 
+# 通知偏好（2026-09-26 用户重新明确）——真实来源唯一：SQLite settings 表；
+# 值统一 '1'/'0'（沿用 settings 表既有约定），键不存在 = 从未设置过。
+#   notify_first_asked    是否已完成"首次通知询问"（全软件只有一个，问过就不再自动问）
+#   notify_news_enabled   市场事件通知开关  ┐ 这两个相互独立：各自页面只改自己的键，
+#   notify_alerts_enabled 盯盘提醒通知开关  ┘ 只有"首次询问"那一次会把两者设成同一个值
+#   notify_news_follow / notify_news_discover / notify_news_event
+#       市场事件页内三个分区（我的关注 / 市场发现 / 重大市场事件），同样住进 SQLite
+NOTIFY_KEYS = {
+    "first_asked": "notify_first_asked",
+    "news_enabled": "notify_news_enabled",
+    "alerts_enabled": "notify_alerts_enabled",
+    "news_follow": "notify_news_follow",
+    "news_discover": "notify_news_discover",
+    "news_event": "notify_news_event",
+}
+
 
 class Api:
     """网页 JS 可调用的对象；pywebview 会把它的方法暴露为 window.pywebview.api.*"""
@@ -177,6 +193,53 @@ class Api:
         finally:
             conn.close()
 
+    # ---------- 通知偏好（2026-09-26 用户重新明确；SQLite settings 是唯一真实来源） ----------
+    def get_notify_settings(self):
+        """读取全部通知偏好，原样返回 settings 表里的值（'1'/'0'；未设置过 = None）。
+
+        界面拿到 None 表示"这一项从没设置过"（例如首次询问还没发生），
+        由界面按产品默认值决定怎么显示——Python 不替用户猜。
+        """
+        conn = dbm.connect()
+        try:
+            return {short: dbm.get_setting(conn, key) for short, key in NOTIFY_KEYS.items()}
+        finally:
+            conn.close()
+
+    def set_notify_settings(self, patch):
+        """只写 patch 里出现的键，其余键一律不动，写完返回最新全量状态。
+
+        "市场事件页只改 notify_news_enabled、盯盘提醒页只改 notify_alerts_enabled"
+        这条规则由这里保证：调用方没传的键，本方法碰都不碰（不存在连带的可能）。
+        未知键直接忽略，不写库。
+        """
+        if not isinstance(patch, dict):
+            print(f"[api] set_notify_settings 参数不是对象，已忽略：{patch!r}")
+            return self.get_notify_settings()
+        conn = dbm.connect()
+        try:
+            for short, value in patch.items():
+                key = NOTIFY_KEYS.get(short)
+                if not key:
+                    continue                      # 未知键忽略（防止把别的设置写坏）
+                dbm.set_setting(conn, key, "1" if _truthy(value) else "0")
+            conn.commit()
+            return {short: dbm.get_setting(conn, key) for short, key in NOTIFY_KEYS.items()}
+        finally:
+            conn.close()
+
+    def ask_notify_first(self, enabled):
+        """首次询问的落点：**唯一**会把两个开关一起设成同一个值的地方。
+
+        enabled=True → 市场事件通知、盯盘提醒通知都开；False → 都关；
+        无论选哪个，都记下 notify_first_asked='1'，以后任何页面都不再自动询问。
+        """
+        return self.set_notify_settings({
+            "first_asked": 1,
+            "news_enabled": 1 if _truthy(enabled) else 0,
+            "alerts_enabled": 1 if _truthy(enabled) else 0,
+        })
+
     # ---------- 我的基金页 ----------
     def get_holdings(self):
         """全部持仓（含已清仓历史），每行附真实计算值。
@@ -192,7 +255,10 @@ class Api:
           cost_cents, sell_cents, profit_cents, profit_pct_str, 买入记录+清仓复盘八文本
         - summary：count/total_cents/cost_cents/profit_cents/today_profit_cents/
           profit_pct_str/today_pct_str（Decimal 精确求和，供资产总览直接显示）
-        - last_fetch_at：最近一次成功联网获取净值的时刻（app_meta，全局动作时间）
+        - last_fetch_at：最近一次成功联网获取净值的时刻（app_meta，全局动作时间，
+          我的基金页"三要素"在用）
+        - last_check_at：最近一次真正联网**检查**净值的时刻（首页"净值最近检查于"用）。
+          与 last_fetch_at 的区别：检查过但没有新净值时它也会前进，因为确实查了
         """
         conn = dbm.connect()
         try:
@@ -225,6 +291,10 @@ class Api:
                     result["history"].append(h)
             result["summary"] = self._summary(conn, result["holdings"])
             result["last_fetch_at"] = dbm.get_app_meta(conn, "last_success_fetch_at")
+            # 首页"净值最近检查于"读这个。旧库还没写过新键时回退到 last_fetch_at——
+            # 它同样只在联网成功后才写，语义一致，不是伪造时间，避免首页一开始空着。
+            result["last_check_at"] = (dbm.get_app_meta(conn, refresher.CHECK_KEY)
+                                       or result["last_fetch_at"])
             return result
         finally:
             conn.close()
@@ -452,24 +522,13 @@ class Api:
         finally:
             conn.close()
 
-    # ---------- 净值刷新（检查式自动更新 + 手动） ----------
-    def maybe_auto_refresh(self, codes):
-        """打开页面时的自动更新入口：检查本地状态，需要才联网。
-
-        判定已改为 **按基金逐个判断**（2026-09-25 用户确认，规则集中在 refresher 模块）：
-        app_meta.nav_refresh_state 里每只基金各自记录 slot/last_try/tries —— 某一只拿到
-        新净值不会阻止其他只继续检查（QDII 净值天然滞后，一刀切会把它锁死）。
-        打开页面时先做本地判断（快、不联网），确实有事要做才起后台线程。
-        手动刷新（refresh_all_nav）不受这些规则限制，随时可点。
-        返回 {"ok": true, "skipped": bool, "reason": "no_holdings"|"nothing_to_do"|None}
-        """
-        codes = _clean_codes(codes)
-        if not codes:
-            return {"ok": True, "skipped": True, "reason": "no_holdings"}
-        result = refresher.refresh_nav(codes, notify=self._notify_js, mode="auto",
-                                       background=True)
-        return {"ok": True, "skipped": not result["started"],
-                "reason": None if result["started"] else "nothing_to_do"}
+    # ---------- 净值刷新（统一后台刷新器 + 手动） ----------
+    # 2026-09-26 用户重新明确刷新需求后，这里删除了原 maybe_auto_refresh
+    # （"打开页面时的检查式自动更新"入口）。原因：净值刷新已改为不再有任何跳过规则
+    # （每次调用都真实联网），而统一刷新器已经负责"启动立即刷新 + 每 30 分钟一次"；
+    # 若仍保留"打开页面就检查"，用户在页面之间来回切换会反复触发整段历史净值的
+    # 真实联网，属于重复刷新。页面现在只做三件事：首屏读本地数据、用户手动点刷新、
+    # 收到 Python 完成事件后重取一次。
 
     def refresh_all_nav(self, codes, mode="manual"):
         """手动刷新（界面按钮）：立即后台联网更新，完成时派发 dataUpdated 事件"""
@@ -504,6 +563,9 @@ class Api:
         try:
             if ok_count > 0:
                 dbm.set_app_meta(conn, "last_success_fetch_at", now)
+                # 手动/添加流程也确实联了网 → 同步记"最近一次真正联网检查"时刻
+                # （首页显示口径，2026-09-26；键名以 refresher 为准，只此一处定义）
+                dbm.set_app_meta(conn, refresher.CHECK_KEY, now)
                 conn.commit()  # 界面"何时获取"依据，必须持久化
         finally:
             conn.close()
@@ -618,6 +680,15 @@ def _clean_codes(codes):
             seen.add(c)
             out.append(c)
     return out
+
+
+def _truthy(v):
+    """界面传来的真假值统一判定：JSON 的 true/false、数字、'1'/'0' 字符串都认"""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _shares_str(shares_scaled):

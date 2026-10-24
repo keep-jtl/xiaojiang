@@ -246,6 +246,7 @@
 
 <script src="nav.js"></script>
 <script src="theme.js"></script>
+<script src="notify.js"></script>
 <script>
 (function () {
   /* ==========================================================
@@ -483,17 +484,10 @@
     }
   }
 
-  /* 打开页面时的自动更新：先展示本地数据，再检查是否今天已自动获取过 */
-  function autoRefreshIfNeeded () {
-    var codes = holdingCodes();
-    if (!codes.length) return;
-    call('maybe_auto_refresh', codes).then(function (r) {
-      if (!r.skipped) {
-        badge('正在获取净值…', 'busy', '首次获取一只基金会稍慢');
-        note('正在自动获取最新净值（首次获取一只基金会稍慢）…', null, false);
-      }
-    }).catch(function () { /* 忽略：不阻塞页面 */ });
-  }
+  /* 2026-09-26 用户重新明确刷新需求：删除"打开页面时的检查式自动更新"。
+     现在净值刷新统一由 Python 后台刷新器负责 —— 软件启动立即刷新一次，之后每 30 分钟
+     一次；每次都是真实联网。页面不再自己发起检查（否则来回切页面会重复联网），
+     只保留：首屏读本地数据、手动点刷新、收到完成事件后重取。 */
 
   /* 手动刷新按钮 */
   var refreshBtn = document.getElementById('refreshBtn');
@@ -810,7 +804,7 @@
   var readyTimer = setInterval(function () {
     if (window.pywebview && window.pywebview.api) {
       clearInterval(readyTimer);
-      reloadAll().then(function () { autoRefreshIfNeeded(); }).catch(function () {
+      reloadAll().catch(function () {
         note('读取数据失败：本机数据库可能尚未初始化，请重启小财通后重试。', 'err', true);
       });
     } else if (++readyTries > 100) {   // 约 10 秒仍未就绪（例如浏览器直接打开页面）

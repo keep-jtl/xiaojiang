@@ -888,17 +888,9 @@
 </main>
 
 <!-- 桌面通知首次询问（首次使用需要桌面通知的功能时主动弹出） -->
-<div class="modal-mask" id="notifyModal">
-  <div class="modal">
-    <h3>🔔 桌面通知</h3>
-    <p>小财通可以在后台向你发送提醒，即使你没有停留在当前页面，也能及时知道重要变化。桌面通知当前<b>默认开启</b>，是否保留？</p>
-    <p id="askHint" style="display:none; color:var(--ink-3); font-size:12px; margin-top:6px;"></p>
-    <div class="m-foot">
-      <button class="btn btn-ghost btn-sm" id="notifyAskNoBtn">关闭通知</button>
-      <button class="btn btn-sm" id="notifyAskYesBtn">保留通知</button>
-    </div>
-  </div>
-</div>
+<!-- 2026-09-26：本页原来的"进入本页询问是否保留桌面通知"弹层已删除。
+     首次询问改为**应用级、只问一次**，由 ui/notify.js 统一负责
+     （状态存在 SQLite settings.notify_first_asked，问过之后任何页面都不再问）。 -->
 
 <!-- 开机自启询问（首次开启桌面通知后询问一次，B1 场景二） -->
 <div class="modal-mask" id="autoStartModal">
@@ -915,6 +907,7 @@
 <script src="nav.js"></script>
 <script src="theme.js"></script>
 <script src="toast.js"></script>
+<script src="notify.js"></script>
 <script>
 (function () {
   var zones = {
@@ -1022,10 +1015,11 @@
   }
 
   /* ==========================================================
-     桌面通知首次询问（2026-08-30 重新确认）：
-     - 首次使用需要桌面通知的功能时，由小财通主动询问
-     - 询问前通知状态为"待确认"，不擅自替用户开启或关闭
-     - 选择后记住，不再重复询问；设置中可随时改
+     通知偏好（2026-09-26 用户重新明确）：
+     - 首次询问 = **应用级、全软件只问一次**，由 ui/notify.js 负责，
+       不再由本页在进入时自动询问；
+     - 真实来源 = SQLite settings（本页用 notify_news_* 一组键）；
+     - 本页与盯盘提醒页的通知开关**相互独立**，互不连带修改。
      ========================================================== */
   var NOTIFY_DESC = {
     follow:   { name: '我的关注通知', offDesc: '开启后重要事件会弹窗提醒', onDesc: '重要事件会弹窗提醒 · 可在「设置」中修改' },
@@ -1033,14 +1027,13 @@
     event:    { name: '重大市场事件通知', offDesc: '开启后重大事件会弹窗提醒', onDesc: '重大事件会弹窗提醒 · 可在「设置」中修改' }
   };
 
-  function masterOn () { return localStorage.getItem('xltc-notify-master') !== '0'; } /* 总状态默认开启 */
-  var SUB_DEFAULTS = { follow: '1', discover: '0', event: '0' }; /* 我的关注默认开；市场发现/重大事件默认关 */
-  function zoneOn (z) {
-    if (!masterOn()) return false;
-    var v = localStorage.getItem('xltc-notify-' + z);
-    return v === null ? SUB_DEFAULTS[z] === '1' : v === '1';
-  }
-  var pendingZone = null; /* 用户从哪个分区开关触发的询问，同意后开启该分区 */
+  /* 通知状态全部读写 SQLite settings（经 ui/notify.js），不再用 localStorage。
+     masterOn = 本页的「市场事件通知」总状态（notify_news_enabled）；
+     三个分区各自一个键（notify_news_follow / _discover / _event）。
+     盯盘提醒页的 notify_alerts_enabled 本页一概不碰 —— 两页从此相互独立。 */
+  function masterOn () { return xltcNotify.flag('news_enabled', false); }
+  var SUB_DEFAULTS = { follow: true, discover: false, event: false }; /* 我的关注默认开；市场发现/重大事件默认关 */
+  function zoneOn (z) { return masterOn() && xltcNotify.flag('news_' + z, SUB_DEFAULTS[z]); }
 
   function renderNotify (z) {
     var m = masterOn();
@@ -1059,87 +1052,40 @@
     bar.querySelector('.switch').classList.toggle('on', on);
   }
 
-  function openAsk (reask, z) {
-    var m = document.getElementById('notifyModal');
-    if (m.classList.contains('open')) return;
-    pendingZone = z || null;
-    var hint = document.getElementById('askHint');
-    if (reask) {
-      hint.textContent = '（你之前选择了关闭，可以重新开启；这次选择后小财通会记住，不再询问）';
-      hint.style.display = '';
-    } else {
-      hint.textContent = '';
-      hint.style.display = 'none';
-    }
-    m.classList.add('open');
-  }
-
-  function maybeAskNotify () {
-    if (!localStorage.getItem('xltc-notify-asked')) openAsk(false, null);
-  }
-
-  /* 首次进入市场事件页 → 主动询问（延时片刻，避免一进来就弹） */
-  setTimeout(maybeAskNotify, 1200);
-
-  document.getElementById('notifyAskYesBtn').addEventListener('click', function () {
-    localStorage.setItem('xltc-notify-master', '1');
-    localStorage.setItem('xltc-notify-asked', '1');
-    /* 从哪个分区开关触发的询问，就开启哪个分区（默认值：我的关注开、市场发现/重大事件关） */
-    if (pendingZone) localStorage.setItem('xltc-notify-' + pendingZone, '1');
-    pendingZone = null;
-    document.getElementById('notifyModal').classList.remove('open');
-    ['follow', 'discover'].forEach(renderNotify);
-    renderEv();
-    sysNote('已记住你的选择：保留桌面通知（以后不再询问，可在「设置」中修改）');
-    /* 同意保留后，顺势询问开机自启（B1） */
-    if (!localStorage.getItem('xltc-autostart-asked')) {
-      document.getElementById('autoStartModal').classList.add('open');
-    }
-  });
-  document.getElementById('notifyAskNoBtn').addEventListener('click', function () {
-    localStorage.setItem('xltc-notify-master', '0');
-    localStorage.setItem('xltc-notify-asked', '1');
-    pendingZone = null;
-    document.getElementById('notifyModal').classList.remove('open');
-    ['follow', 'discover'].forEach(renderNotify);
-    renderEv();
-    sysNote('已记住你的选择：关闭桌面通知。事件仍会正常显示在本页；可在「设置」中随时重新开启');
-  });
-
-  /* 分区开关：待确认 → 询问；已关 → 用户主动点击则重新询问（相当于"在设置中重新开启"，由用户决定）；已开 → 正常切换 */
+  /* 分区开关：只改本页自己的键（一个 set 调用只写传进去的键，其余一律不动）。
+     打开任一类别 → 「市场事件通知」整体算开着（news_enabled=1）；
+     关掉最后一个开着的类别 → 整体关闭（news_enabled=0）。
+     news_enabled 只在"首次询问"时被一起初始化，之后只由本页自己改；
+     盯盘提醒页的 notify_alerts_enabled 本页一概不碰 —— 两页相互独立。 */
+  var ZONES = ['follow', 'discover', 'event'];
   function switchClick (z) {
-    if (!localStorage.getItem('xltc-notify-asked')) { openAsk(false, z); return; } /* 首次使用 → 先询问是否保留 */
-    if (!masterOn()) { openAsk(true, z); return; } /* 总状态关 → 点击重新询问（由用户决定） */
-    localStorage.setItem('xltc-notify-' + z, zoneOn(z) ? '0' : '1');
-    renderNotify(z);
+    var nowOn = zoneOn(z);
+    var patch = {};
+    patch['news_' + z] = !nowOn;
+    if (!nowOn) {
+      if (!masterOn()) patch.news_enabled = true;   /* 整体本来关着 → 顺带把整体打开 */
+    } else if (!ZONES.some(function (k) { return k !== z && zoneOn(k); })) {
+      patch.news_enabled = false;                   /* 关掉最后一个开着的类别 → 整体关闭 */
+    }
+    xltcNotify.set(patch);   /* 只写 patch 里的键，多余的键一个都不带 */
   }
 
   ['follow', 'discover'].forEach(function (z) {
     var bar = document.querySelector('.notify-bar[data-zone="' + z + '"]');
     bar.querySelector('.switch').addEventListener('click', function () { switchClick(z); });
-    renderNotify(z);
   });
 
   /* 重大市场事件开关（与分区开关同一套规则） */
   var evSw = document.getElementById('eventSwitch');
-  function renderEv () {
+  evSw.addEventListener('click', function () { switchClick('event'); });
+
+  /* 渲染：设置从 SQLite 读到、或发生变化时刷新一次（含首次读取）。
+     首次询问答完之后，本页的开关显示会跟着自动更新。 */
+  function renderAll () {
+    ['follow', 'discover'].forEach(renderNotify);
     evSw.classList.toggle('on', zoneOn('event'));
   }
-  evSw.addEventListener('click', function () { switchClick('event'); });
-  renderEv();
-
-  /* 遮罩点击关闭 */
-  document.getElementById('notifyModal').addEventListener('click', function (e) {
-    if (e.target === this) this.classList.remove('open');
-  });
-
-  /* 跨页面同步：盯盘提醒页改变总状态时，本页立即刷新显示 */
-  window.addEventListener('storage', function (e) {
-    if (e.key && e.key.indexOf('xltc-notify') === 0) {
-      ['follow', 'discover'].forEach(renderNotify);
-      renderEv();
-    }
-  });
+  xltcNotify.onChange(renderAll);
 
   /* ---------- 开机自启询问（B1 场景二：首次开启桌面通知后问一次，拒绝后不反复） ---------- */
   function sysNote (text) {

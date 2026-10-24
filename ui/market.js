@@ -6,7 +6,8 @@
  *   get_market_quotes(码)   8 只真实指数行情（腾讯主源→新浪备用）
  *   get_holdings()          资产总览（真实持仓，SQLite）
  *   get_today_alerts()      今日提醒（真实触发记录；无则空态）
- *   maybe_auto_refresh(码)  打开首页时检查基金净值是否需更新（当天只联网一次）
+ *   （净值刷新由 Python 后台刷新器统一负责：启动立即刷新 + 之后每 30 分钟一次；
+ *     本页不再自己发起净值检查，只在收到 dataUpdated 事件后重取）
  *
  * 设计口径（用户已确认）：
  *   - 所有指数必须是真实行情；某指数暂不可用 → 显示"暂不可用"
@@ -179,7 +180,7 @@
   /* ---------- 渲染：资产总览（真实持仓汇总）
      视觉与已验收首页一致：资产卡收益用普通字色（asset-hero 不红绿），
      红涨绿跌只用于市场行情行。金额全在 Python 侧算好，界面只显示。 ---------- */
-  function renderHero (summary, holdingCount, lastFetchAt) {
+  function renderHero (summary, holdingCount, lastCheckAt) {
     var none = summary.total_cents === null || summary.total_cents === undefined;
     document.getElementById('heroTotal').textContent = none ? '—' : '¥ ' + money(summary.total_cents);
     var today = document.getElementById('heroToday');
@@ -195,13 +196,16 @@
     document.getElementById('heroRate').textContent =
       summary.profit_pct_str ? summary.profit_pct_str + '%' : '—';
     document.getElementById('heroCount').textContent = holdingCount + ' 只';
-    // 底部提示行：无持仓 → 引导添加；有持仓 → 显示最近一次真实净值获取时间
+    // 底部提示行：无持仓 → 引导添加；有持仓 → 显示"净值最近检查于"
+    // 2026-09-26 口径修正：显示的是"最近一次真正联网检查净值"的时刻，不是"净值更新了"。
+    // 休市日联网成功但没有新净值时，这里的时间照样前进（确实查过），
+    // 而卡片数字不变（确实没有新数据），两者不矛盾。
     var foot = document.getElementById('heroFoot');
     if (!holdingCount) {
       foot.innerHTML = '还没有持仓：<a href="funds.html">去添加你持有的基金</a>';
       return;
     }
-    foot.textContent = lastFetchAt ? '净值数据更新于 ' + lastFetchAt : '';
+    foot.textContent = lastCheckAt ? '净值最近检查于 ' + lastCheckAt : '';
   }
 
   /* ---------- 渲染：今日提醒（真实空态） ---------- */
@@ -277,23 +281,15 @@
       renderSessions();
       renderQuotes();
       renderFoot();
-      renderHero(rs[2].summary || {}, (rs[2].holdings || []).length, rs[2].last_fetch_at);
+      renderHero(rs[2].summary || {}, (rs[2].holdings || []).length, rs[2].last_check_at);
       renderAlerts(rs[3]);
     });
   }
 
-  /* ---------- 打开首页时的净值自动检查（2026-09-24 新增）
-     与我基金页同一套后端逻辑：后端用 app_meta 全库共享"今天已自动更新过"
-     标记，当天只联网一次，不会重复请求；单只基金失败不影响其他基金，
-     失败时库里旧净值原样保留（后端已保证），失败静默不打扰用户。
-     只在页面刚打开时检查一次，防止事件重取时来回触发。 ---------- */
-  var autoChecked = false;
-  function autoRefreshNavIfNeeded () {
-    if (autoChecked) return;
-    autoChecked = true;
-    if (!state.holdingCodes.length) return;   // 没有持仓：无需联网
-    call('maybe_auto_refresh', state.holdingCodes).catch(function () {});
-  }
+  /* 2026-09-26 用户重新明确刷新需求：删除"打开首页时的净值自动检查"。
+     净值刷新已统一由 Python 后台刷新器负责（软件启动立即刷新一次 + 之后每 30 分钟
+     一次，每次都真实联网、不再有任何跳过规则）。首页若仍自己发起检查，来回切页面
+     会重复联网。首页现在只做：首屏读本地数据、手动点刷新、收到完成事件后重取。 */
 
   /* ---------- 事件：数据更新（Python 完成刷新后通知） ----------
      事件到达 → 重取一次；refreshQuotes 的 then 只在超时兜底时补取，
@@ -311,8 +307,9 @@
   };
 
   /* ---------- 事件：刷新按钮 ----------
-     页面上不再开定时器：行情的定时刷新由 Python 后台刷新器统一负责
-     （交易时段内每 10 分钟一次），完成后发 marketQuotesUpdated 事件 → 本页重取。
+     页面上不开任何定时器：行情的定期刷新由 Python 后台刷新器统一负责
+     （软件启动立即刷新一次 + 之后每 30 分钟一次，休市也照拉），
+     完成后发 marketQuotesUpdated 事件 → 本页重取。
      这里只保留"用户手动点刷新"这一条路径。 ---------- */
   document.getElementById('mktRefreshBtn').addEventListener('click', function () {
     refreshQuotes(false);
@@ -323,9 +320,7 @@
   var readyTimer = setInterval(function () {
     if (window.pywebview && window.pywebview.api) {
       clearInterval(readyTimer);
-      load().then(function () {
-        autoRefreshNavIfNeeded();   // 先出画面，再检查净值是否需要更新（不阻塞首屏）
-      }).catch(function () {
+      load().catch(function () {
         var w = document.getElementById('mktFoot');
         w.hidden = false;
         document.getElementById('mktFootB').textContent = '读取数据失败';
