@@ -235,6 +235,70 @@ CREATE TABLE IF NOT EXISTS app_meta (
     value      TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- ============ 四、市场事件缓存（可重建，不属于用户数据） ============
+
+-- 11. 新闻数据源状态（每个源一行）
+CREATE TABLE IF NOT EXISTS news_sources (
+    source_key      TEXT NOT NULL PRIMARY KEY,   -- sec_edgar / fed_rss
+    name            TEXT NOT NULL,
+    kind            TEXT NOT NULL DEFAULT 'official',
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    last_attempt_at TEXT,                        -- 最近一次尝试时间
+    last_success_at TEXT,                        -- 最近一次成功时间
+    last_error      TEXT,                        -- 最近一次错误（成功时清空）
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+-- 12. 基金画像（由当前持仓 + fund_meta 生成；缓存，可重建）
+CREATE TABLE IF NOT EXISTS fund_profiles (
+    fund_code    TEXT NOT NULL PRIMARY KEY,
+    market       TEXT NOT NULL,                  -- cn / us / hk
+    asset_class  TEXT NOT NULL,                  -- equity / bond / mixed / qdii
+    track_index  TEXT,                           -- 跟踪指数（指数基金）
+    keywords     TEXT NOT NULL DEFAULT '[]',     -- JSON：代码/公司/行业关键词
+    source_note  TEXT,                           -- 关键词来源说明（阶段一为人工清单）
+    updated_at   TEXT NOT NULL,
+    FOREIGN KEY (fund_code) REFERENCES fund_meta(code) ON DELETE CASCADE
+);
+
+-- 13. 新闻条目（缓存，可重建；保留全部抓到的条目，未匹配的也留着用于统计）
+CREATE TABLE IF NOT EXISTS news_items (
+    id              INTEGER NOT NULL PRIMARY KEY,
+    uuid            TEXT NOT NULL UNIQUE,
+    source          TEXT NOT NULL,               -- sec_edgar / fed_rss
+    source_id       TEXT NOT NULL,               -- 源内唯一 ID
+    title           TEXT NOT NULL,
+    summary         TEXT,
+    url             TEXT,
+    published_at    TEXT,                        -- 本地时间 'YYYY-MM-DD HH:MM:SS'
+    published_ts    INTEGER,                     -- epoch 秒（排序/过滤）
+    fetched_at      TEXT NOT NULL,
+    content_hash    TEXT NOT NULL,               -- 去重指纹
+    duplicate_count INTEGER NOT NULL DEFAULT 0,  -- 同事件重复报道数
+    importance      REAL NOT NULL DEFAULT 0,     -- 源内重要度（0~1）
+    raw_json        TEXT,
+    created_at      TEXT NOT NULL,
+    UNIQUE(source, source_id)
+);
+CREATE INDEX IF NOT EXISTS ix_news_published ON news_items(published_ts DESC);
+CREATE INDEX IF NOT EXISTS ix_news_hash ON news_items(content_hash);
+
+-- 14. 新闻-基金关联（缓存；一条新闻对一只基金最多一条）
+CREATE TABLE IF NOT EXISTS news_item_funds (
+    id            INTEGER NOT NULL PRIMARY KEY,
+    news_id       INTEGER NOT NULL,
+    fund_code     TEXT NOT NULL,
+    relation_type TEXT NOT NULL CHECK (relation_type IN ('direct','indirect')),
+    score         REAL NOT NULL DEFAULT 0,
+    evidence      TEXT,                          -- JSON：匹配证据（公司/指数/行业/权重）
+    created_at    TEXT NOT NULL,
+    UNIQUE(news_id, fund_code),
+    FOREIGN KEY (news_id) REFERENCES news_items(id) ON DELETE CASCADE,
+    FOREIGN KEY (fund_code) REFERENCES fund_meta(code) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_news_funds_fund ON news_item_funds(fund_code);
 """
 
 # 预置：行情花名册种子（代码格式以数据源适配层约定为准，此处为唯一标识）
@@ -281,14 +345,14 @@ def init_db():
         conn.execute("PRAGMA journal_mode = WAL")  # 读写互不阻塞
         conn.executescript(SCHEMA_SQL)
         now = now_str()
-        # 程序元数据种子（schema_version 升级：v2 → v3 新增第 11 张表 market_calendar，
+        # 程序元数据种子（schema_version 升级：v3 → v4 新增 4 张市场事件缓存表；
         # 表结构由上方 executescript 的 IF NOT EXISTS 自动补齐，无需逐库迁移脚本）
         cur_ver = conn.execute("SELECT value FROM app_meta WHERE key = 'schema_version'").fetchone()
         ver = int(cur_ver["value"]) if cur_ver else 0
-        if ver < 3:
+        if ver < 4:
             conn.execute(
-                "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '3', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value = '3', updated_at = excluded.updated_at",
+                "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '4', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = '4', updated_at = excluded.updated_at",
                 (now,),
             )
         conn.execute(
@@ -302,6 +366,15 @@ def init_db():
                 "(code, name, mkt_type, market, display_order, is_preset, enabled, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)",
                 (code, name, mkt_type, market, order, now, now),
+            )
+        # 市场事件数据源种子（阶段一：SEC EDGAR + 美联储 RSS）
+        for key, name, kind in (("sec_edgar", "SEC EDGAR（美国证监会）", "official"),
+                                ("fed_rss", "美联储新闻稿 RSS", "official")):
+            conn.execute(
+                "INSERT OR IGNORE INTO news_sources "
+                "(source_key, name, kind, enabled, created_at, updated_at) "
+                "VALUES (?, ?, ?, 1, ?, ?)",
+                (key, name, kind, now, now),
             )
         conn.commit()
     finally:

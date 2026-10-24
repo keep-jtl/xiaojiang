@@ -25,6 +25,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from . import converters as cv
 from . import db as dbm
 from . import market_cal as mcal
+from . import news_service
 from . import refresher
 from .refresher import NAV_REFRESH_LOCK, QUOTE_REFRESH_LOCK
 from .sources import fund_list, fund_nav as src
@@ -239,6 +240,19 @@ class Api:
             "news_enabled": 1 if _truthy(enabled) else 0,
             "alerts_enabled": 1 if _truthy(enabled) else 0,
         })
+
+    # ---------- 市场事件（阶段一：SEC + 美联储） ----------
+    def get_news_feed(self, days=7):
+        """真实市场事件列表 + 真实统计 + 数据源状态。
+
+        只返回数据库里已有的事件；页面据 summary 显示真实条数。
+        没有相关事件时 funds 为空，绝不编造或凑数。
+        """
+        conn = dbm.connect()
+        try:
+            return news_service.get_feed(conn, days)
+        finally:
+            conn.close()
 
     # ---------- 我的基金页 ----------
     def get_holdings(self):

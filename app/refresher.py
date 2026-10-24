@@ -76,6 +76,7 @@ import time
 
 from . import db as dbm
 from . import market_cal as mcal
+from . import news_service
 from .sources import fund_nav as src
 
 # ---------- 可调参数 ----------
@@ -284,6 +285,23 @@ def _task_quotes(api):
     return "已发起联网刷新"
 
 
+def _task_news(notify):
+    """市场事件：抓官方源 → 去重 → 与真实持仓关联 → 入库；失败保留旧数据。
+
+    阶段一只接 SEC EDGAR + 美联储 RSS；抓取失败只更新数据源状态，
+    不删除、不改写已有新闻，页面会显示上次成功时间。
+    """
+    conn = dbm.connect()
+    try:
+        r = news_service.refresh_all(conn, notify=notify)
+    finally:
+        conn.close()
+    msg = f"新增 {r['new']} 条，关联 {r['matched']} 条"
+    if r["errors"]:
+        msg += f"；{len(r['errors'])} 个源有错误（旧数据保留）"
+    return msg
+
+
 # ====================== tick 与常驻循环 ======================
 
 def tick(api, notify=None, n=None, log=None):
@@ -301,7 +319,8 @@ def tick(api, notify=None, n=None, log=None):
         out = {}
         for name, fn in (("日历", _task_calendar),
                          ("净值", lambda: _task_nav(notify)),
-                         ("行情", lambda: _task_quotes(api))):
+                         ("行情", lambda: _task_quotes(api)),
+                         ("市场事件", lambda: _task_news(notify))):
             try:
                 brief = fn()
                 out[name] = brief
