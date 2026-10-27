@@ -240,7 +240,7 @@
 
         <div class="sub-list" id="followList"></div>
         <div class="empty-hint" id="followEmpty">近 7 天暂时没有与你有关的事件。</div>
-        <div class="card-hint" id="newsStatus" style="margin-top:10px;">正在读取真实市场事件…</div>
+        <div class="card-hint" id="newsStatus" style="margin-top:10px; line-height:1.8;">正在读取真实市场事件…</div>
       </div><!-- /followZone -->
 
       <!-- ============ 区域二：市场发现 ============ -->
@@ -537,6 +537,69 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  function maxStamp (list) {
+    var vals = (list || []).filter(function (x) { return !!x; }).sort();
+    return vals.length ? vals[vals.length - 1] : null;
+  }
+
+  function sourceLabel (s) {
+    if (s.key === 'sec_edgar') return 'SEC EDGAR';
+    if (s.key === 'fed_rss') return '美联储 RSS';
+    return s.name || s.key || '数据源';
+  }
+
+  function sourceStatusOf (s) {
+    if (s.status) return s.status;
+    if (s.last_error) {
+      var err = String(s.last_error);
+      return (err.indexOf('XLTC_SEC_CONTACT_EMAIL') >= 0 ||
+              err.indexOf('已跳过 SEC 抓取') >= 0) ? 'skipped' : 'error';
+    }
+    return s.last_success_at ? 'ok' : 'waiting';
+  }
+
+  function deriveOverall (sources) {
+    if (!sources.length) return 'waiting';
+    var ok = 0, err = 0;
+    sources.forEach(function (s) {
+      var st = sourceStatusOf(s);
+      if (st === 'ok') ok++;
+      else if (st === 'error') err++;
+    });
+    if (ok === sources.length) return 'ok';
+    if (ok > 0) return 'partial';
+    if (err > 0) return 'failed';
+    return 'waiting';
+  }
+
+  function sourceStatusLine (s) {
+    var st = sourceStatusOf(s);
+    var cn = { ok: '成功', skipped: '跳过', error: '失败', waiting: '等待' }[st] || st;
+    var parts = [sourceLabel(s) + '：' + cn];
+    var n = Number(s.item_count_7d);
+    if (!isFinite(n)) {
+      // 兼容旧版 API：用当前返回的近 7 天列表按来源计数。
+      n = (newsData.items || []).filter(function (x) { return x.source === s.key; }).length;
+    }
+    if (st === 'ok') {
+      parts.push(n > 0 ? ('近 7 天 ' + n + ' 条') : '近 7 天无新增');
+    } else {
+      if (s.last_error) parts.push(s.last_error);
+      else if (st === 'waiting') parts.push('尚未执行抓取');
+      if (n > 0) parts.push('近 7 天 ' + n + ' 条（旧数据）');
+    }
+    var latest = s.latest_item_at;
+    if (!latest) {
+      latest = maxStamp((newsData.items || []).filter(function (x) {
+        return x.source === s.key;
+      }).map(function (x) { return x.published_at; }));
+    }
+    if (latest) parts.push('最新文章 ' + latest);
+    else if (st === 'ok') parts.push('暂无文章');
+    if (st !== 'ok' && s.last_success_at) parts.push('上次成功 ' + s.last_success_at);
+    return parts.join(' · ');
+  }
+
   function fmtWhen (s) {
     if (!s) return '时间未知';
     var d = new Date();
@@ -653,17 +716,34 @@
 
     var status = document.getElementById('newsStatus');
     var badge = document.getElementById('dataStatusBadge');
-    var errs = (newsData.sources || []).map(function (s) { return s.last_error; })
-      .filter(function (x) { return !!x; });
-    var errText = errs.length ? ('（' + errs[0] + '）') : '';
-    if (newsData.last_success_at) {
-      var stale = newsData.stale ? (' · 本次获取失败，显示上次成功数据' + errText) : '';
-      status.textContent = '数据更新于 ' + newsData.last_success_at + ' · 来源：SEC EDGAR / 美联储' + stale;
-      badge.textContent = newsData.stale ? '真实数据 · 更新失败' : '真实数据 · 已更新';
-    } else {
-      status.textContent = '还没有成功获取过数据；后台会自动重试。' + errText;
-      badge.textContent = '真实数据 · 等待更新';
-    }
+    var sources = newsData.sources || [];
+    var overall = newsData.overall_status || deriveOverall(sources);
+    var badgeText = {
+      ok: '真实数据 · 已更新',
+      partial: '真实数据 · 部分来源未更新',
+      failed: '真实数据 · 更新失败',
+      waiting: '真实数据 · 等待更新'
+    }[overall] || '真实数据 · 等待更新';
+    badge.textContent = badgeText;
+    badge.style.color = overall === 'partial' ? 'var(--tag-orange-ink)' :
+      (overall === 'failed' ? 'var(--tag-red-ink)' : '');
+
+    // 三类时间严格分开：检查时间 ≠ 成功检查时间 ≠ 最新文章时间。
+    var lastAttempt = newsData.last_attempt_at ||
+      maxStamp(sources.map(function (s) { return s.last_attempt_at; }));
+    var lastSuccess = newsData.last_success_at ||
+      maxStamp(sources.map(function (s) { return s.last_success_at; }));
+    var latestItem = newsData.latest_item_at ||
+      maxStamp((newsData.items || []).map(function (x) { return x.published_at; }));
+    var lines = [
+      '最近检查：' + (lastAttempt || '尚未检查'),
+      '最近成功：' + (lastSuccess || '尚未成功'),
+      '最新文章：' + (latestItem || '暂无文章')
+    ];
+    sources.forEach(function (s) { lines.push(sourceStatusLine(s)); });
+    status.innerHTML = lines.map(function (line) {
+      return '<div>' + escHtml(line) + '</div>';
+    }).join('');
 
     var statsHint = document.getElementById('statsHint');
     if (statsHint) {

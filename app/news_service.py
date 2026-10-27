@@ -36,6 +36,36 @@ SOURCE_NAMES = {
     "fed_rss": "美联储新闻稿",
 }
 
+# 这个错误是“按设计跳过”，不是网络/HTTP/解析失败。
+SEC_SKIP_MARKER = "XLTC_SEC_CONTACT_EMAIL"
+
+
+def _source_status(row):
+    """数据源状态：ok 成功 / skipped 按设计跳过 / error 实际失败 / waiting 未执行。"""
+    err = (row["last_error"] or "").strip()
+    if err:
+        if SEC_SKIP_MARKER in err or "已跳过 SEC 抓取" in err:
+            return "skipped"
+        return "error"
+    if row["last_success_at"]:
+        return "ok"
+    return "waiting"
+
+
+def _overall_status(statuses):
+    """整体状态：ok 全部成功 / partial 部分成功 / failed 全部失败 / waiting 尚未执行。"""
+    if not statuses:
+        return "waiting"
+    ok = statuses.count("ok")
+    err = statuses.count("error")
+    if ok == len(statuses):
+        return "ok"
+    if ok > 0:
+        return "partial"
+    if err > 0:
+        return "failed"
+    return "waiting"
+
 
 def _profile_rule(name, fund_type):
     """按基金名称/类型生成画像（阶段一规则；阶段二改为读真实重仓股）"""
@@ -312,7 +342,12 @@ def _parse_evidence(s):
 
 
 def get_feed(conn, days=7):
-    """给界面读取的新闻列表 + 真实统计 + 数据源状态"""
+    """给界面读取的新闻列表 + 真实统计 + 逐源/整体状态。
+
+    sources[].status: ok 成功 / skipped 按设计跳过 / error 实际失败 / waiting 未执行；
+    overall_status: ok / partial / failed / waiting；
+    last_attempt_at / last_success_at / latest_item_at 三类时间严格分开。
+    """
     cutoff = int(time.time()) - int(days) * 86400
     rows = conn.execute(
         "SELECT * FROM news_items WHERE published_ts IS NOT NULL AND published_ts >= ? "
@@ -375,17 +410,40 @@ def get_feed(conn, days=7):
     important = [i for i in today_related if i["score"] >= 0.7]
     important_7d = [i for i in related if i["score"] >= 0.7]
 
+    # 逐源统计近 N 天条数和最新文章时间（最新文章时间取缓存内全部条目，用于和“检查时间”区分）
+    stat_rows = conn.execute(
+        "SELECT source,"
+        " SUM(CASE WHEN published_ts IS NOT NULL AND published_ts >= ? THEN 1 ELSE 0 END) AS c,"
+        " MAX(published_at) AS latest_item_at"
+        " FROM news_items GROUP BY source",
+        (cutoff,),
+    ).fetchall()
+    item_stats = {
+        r["source"]: {
+            "item_count_7d": int(r["c"] or 0),
+            "latest_item_at": r["latest_item_at"],
+        }
+        for r in stat_rows
+    }
+
     sources = []
     for s in conn.execute("SELECT * FROM news_sources ORDER BY source_key").fetchall():
+        stat = item_stats.get(s["source_key"], {})
         sources.append({
             "key": s["source_key"], "name": s["name"],
             "last_attempt_at": s["last_attempt_at"],
             "last_success_at": s["last_success_at"],
             "last_error": s["last_error"],
+            "status": _source_status(s),
+            "item_count_7d": stat.get("item_count_7d", 0),
+            "latest_item_at": stat.get("latest_item_at"),
         })
     last_success = max([s["last_success_at"] for s in sources if s["last_success_at"]] or [None])
     last_attempt = max([s["last_attempt_at"] for s in sources if s["last_attempt_at"]] or [None])
-    stale = any(s["last_error"] for s in sources) or not last_success
+    latest_item_at = max([s["latest_item_at"] for s in sources if s["latest_item_at"]] or [None])
+    overall_status = _overall_status([s["status"] for s in sources])
+    # stale 保留兼容：只有“没有任何成功结果”才是 stale；部分来源未更新由 overall_status 表达。
+    stale = overall_status in ("failed", "waiting")
 
     return {
         "items": items,
@@ -400,6 +458,10 @@ def get_feed(conn, days=7):
         "sources": sources,
         "last_success_at": last_success,
         "last_attempt_at": last_attempt,
+        "latest_item_at": latest_item_at,
+        "overall_status": overall_status,
+        "partial": overall_status == "partial",
         "stale": stale,
         "today": today,
+        "window_days": int(days),
     }
