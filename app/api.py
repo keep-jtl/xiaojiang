@@ -20,7 +20,7 @@ import json
 import threading
 import uuid
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from . import converters as cv
 from . import db as dbm
@@ -53,6 +53,290 @@ NOTIFY_KEYS = {
     "news_discover": "notify_news_discover",
     "news_event": "notify_news_event",
 }
+
+# 盯盘提醒 1A：只做规则真实保存，不做检查引擎/通知/历史。
+# 数值原文存 TEXT（见 alerts.cond_value），不需要缩放换算；这里只做校验与规范化。
+ALERT_NOTE_MAX = 200
+ALERT_COND_TYPES = {"pct", "line"}
+ALERT_DIRECTIONS = {"up", "down"}
+ALERT_VALID_TYPES = {"once", "until_trigger", "range"}  # ongoing 页面未暴露
+MARKET_TYPE_LABELS = {"index": "指数", "sector": "赛道", "commodity": "商品"}
+
+
+def _alert_enabled_count(conn):
+    """启用中的提醒数（首页与提醒页共用，口径必须一致）"""
+    return conn.execute(
+        "SELECT COUNT(*) c FROM alerts WHERE deleted = 0 AND enabled = 1"
+    ).fetchone()["c"]
+
+
+def _alert_id(value):
+    """前端传来的提醒 id → 正整数；无效时给出可读错误"""
+    try:
+        i = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("提醒编号不正确")
+    if i <= 0:
+        raise ValueError("提醒编号不正确")
+    return i
+
+
+def _alert_cond_value(raw):
+    """用户输入的条件数值 → 规范化十进制字符串；只接受有限正数。"""
+    text = str(raw if raw is not None else "").strip()
+    if not text or len(text) > 20:
+        raise ValueError("请填写有效的触发数值")
+    try:
+        d = Decimal(text)
+    except (InvalidOperation, ValueError):
+        raise ValueError("触发数值必须是数字")
+    if not d.is_finite() or d <= 0:
+        raise ValueError("触发数值必须大于 0")
+    s = format(d, "f")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    if not s or len(s) > 20:
+        raise ValueError("触发数值过长")
+    return s
+
+
+def _alert_date(value, label):
+    """严格 YYYY-MM-DD → date；空值返回 None。"""
+    if value in (None, ""):
+        return None
+    try:
+        return datetime.date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        raise ValueError(f"{label}格式不正确，应为 YYYY-MM-DD")
+
+
+def _fund_tag_cls(fund_type):
+    t = (fund_type or "").upper()
+    return "tag-blue" if ("指数" in t or "QDII" in t) else "tag-green"
+
+
+def _market_tag_txt(mkt_type):
+    return MARKET_TYPE_LABELS.get(mkt_type or "", mkt_type or "指数")
+
+
+def _alert_same_object(existing, obj_type, fund_code, mkt_code):
+    if not existing or existing["obj_type"] != obj_type:
+        return False
+    if obj_type == "fund":
+        return existing["fund_code"] == fund_code
+    return existing["mkt_code"] == mkt_code
+
+
+def _alert_market_for(conn, obj_type, fund_code, mkt_code):
+    """提醒对象所属交易日历市场：场外基金按 A 股日历，指数按 market_meta.market。"""
+    if obj_type == "fund":
+        return "cn"
+    row = conn.execute(
+        "SELECT market FROM market_meta WHERE code = ?", (mkt_code,)
+    ).fetchone()
+    return row["market"] if row else None
+
+
+def _alert_next_trade_date(conn, market, base_date=None):
+    """下一交易日（不含基准日）；日历缺失时明确报错，绝不猜日期。"""
+    if market not in ("cn", "hk", "us"):
+        raise ValueError("该提醒对象没有可用的交易日历")
+    if base_date is None:
+        now_bj = datetime.datetime.now()
+        base_date = mcal.ny_from_beijing(now_bj).date() if market == "us" else now_bj.date()
+    mcal.ensure_calendar(conn, markets=(market,), allow_network=False)
+    nd = mcal.next_trade_date(conn, market, base_date)
+    if nd is None:
+        raise ValueError("交易日历缺失，无法计算下一交易日；请改用自定义时间范围")
+    return nd
+
+
+def _alert_validate(conn, payload, existing=None):
+    """校验并规范化 create/update 的入参；返回可直接写 alerts 表的 dict。"""
+    if not isinstance(payload, dict):
+        raise ValueError("提醒参数格式不正确")
+
+    obj_type = str(payload.get("obj_type") or "").strip()
+    if obj_type not in ("fund", "mkt"):
+        raise ValueError("请选择提醒对象")
+    fund_code = str(payload.get("fund_code") or "").strip() or None
+    mkt_code = str(payload.get("mkt_code") or "").strip() or None
+    if obj_type == "fund":
+        mkt_code = None
+        if not fund_code:
+            raise ValueError("请选择要提醒的基金")
+    else:
+        fund_code = None
+        if not mkt_code:
+            raise ValueError("请选择要提醒的指数")
+
+    cond_type = str(payload.get("cond_type") or "").strip()
+    if cond_type not in ALERT_COND_TYPES:
+        raise ValueError("请选择涨跌幅或数值线条件")
+    direction = str(payload.get("direction") or "").strip()
+    if direction not in ALERT_DIRECTIONS:
+        raise ValueError("请选择涨破/跌破方向")
+    cond_value = _alert_cond_value(payload.get("cond_value"))
+
+    valid_type = str(payload.get("valid_type") or "").strip()
+    if valid_type == "forever":  # 兼容旧界面字段
+        valid_type = "until_trigger"
+    if valid_type not in ALERT_VALID_TYPES:
+        raise ValueError("请选择有效期")
+
+    same_obj = _alert_same_object(existing, obj_type, fund_code, mkt_code)
+    if not same_obj:
+        if obj_type == "fund":
+            hit = conn.execute(
+                "SELECT 1 FROM holdings WHERE fund_code = ? AND deleted = 0 "
+                "AND status IN ('holding','watch') LIMIT 1",
+                (fund_code,),
+            ).fetchone()
+            if not hit:
+                raise ValueError("该基金已不在我的基金/关注列表中，请先添加或重新选择")
+        else:
+            hit = conn.execute(
+                "SELECT 1 FROM market_meta WHERE code = ? AND enabled = 1", (mkt_code,)
+            ).fetchone()
+            if not hit:
+                raise ValueError("该指数不在可用的预置清单中")
+
+    start = _alert_date(payload.get("start_date"), "开始日期")
+    end = _alert_date(payload.get("end_date"), "结束日期")
+    today = datetime.date.today()
+
+    if valid_type == "once":
+        market = _alert_market_for(conn, obj_type, fund_code, mkt_code)
+        if not market:
+            raise ValueError("找不到该对象的交易日历")
+        # 只改条件/备注时保留原有下一交易日，避免日期被往后推。
+        if (existing and existing["valid_type"] == "once" and same_obj
+                and existing["start_date"] and existing["end_date"]
+                and existing["start_date"] == existing["end_date"]):
+            start = datetime.date.fromisoformat(existing["start_date"])
+            end = start
+        else:
+            start = _alert_next_trade_date(conn, market)
+            end = start
+    elif valid_type == "until_trigger":
+        end = None
+        if start and start < today:
+            raise ValueError("开始日期不能早于今天")
+    else:  # range
+        if not start or not end:
+            raise ValueError("自定义时间范围需要填开始和结束日期")
+        if end < start:
+            raise ValueError("结束日期不能早于开始日期")
+        if end < today:
+            raise ValueError("结束日期不能早于今天")
+
+    note = str(payload.get("note") or "").strip()
+    if len(note) > ALERT_NOTE_MAX:
+        raise ValueError(f"备注不能超过 {ALERT_NOTE_MAX} 字")
+
+    enabled = existing["enabled"] if existing is not None else 1
+    if "enabled" in payload:
+        enabled = 1 if _truthy(payload.get("enabled")) else 0
+
+    return {
+        "obj_type": obj_type,
+        "fund_code": fund_code,
+        "mkt_code": mkt_code,
+        "cond_type": cond_type,
+        "direction": direction,
+        "cond_value": cond_value,
+        "valid_type": valid_type,
+        "start_date": start.isoformat() if start else None,
+        "end_date": end.isoformat() if end else None,
+        "note": note or None,
+        "enabled": int(enabled),
+    }
+
+
+def _alert_rule_vm(row, today):
+    """数据库行 → 提醒页现有视图模型（页面渲染函数不需要重写）。"""
+    obj_type = row["obj_type"]
+    is_fund = obj_type == "fund"
+    code = row["fund_code"] if is_fund else row["mkt_code"]
+    name = (row["fund_name"] if is_fund else row["mkt_name"]) or code or ""
+    fund_type = row["fund_type"] or ""
+    mkt_type = row["mkt_type"] or ""
+    tag_txt = (fund_type or "基金") if is_fund else _market_tag_txt(mkt_type)
+    tag_cls = _fund_tag_cls(fund_type) if is_fund else "tag-blue"
+    sub = f"{code} · 我的基金" if is_fund else f"预设清单 · {tag_txt}"
+
+    cond_type = row["cond_type"]
+    direction = row["direction"]
+    value = row["cond_value"]
+    if cond_type == "pct":
+        dir_cn = "涨超" if direction == "up" else "跌超"
+        cond_core = f"单日{dir_cn} {value}%"
+        cond_note = "涨跌幅条件 · 场外基金" if is_fund else "涨跌幅条件 · 指数"
+        cond_icon = "📈" if direction == "up" else "📉"
+    else:
+        dir_cn = "涨破" if direction == "up" else "跌破"
+        unit = "元" if is_fund else "点"
+        cond_core = f"{dir_cn} {value} {unit}"
+        cond_note = "数值线条件 · 基金净值" if is_fund else "数值线条件 · 指数点位"
+        cond_icon = "🎯"
+
+    valid = row["valid_type"]
+    start = row["start_date"] or ""
+    end = row["end_date"] or ""
+    obj_zone = "fund" if is_fund else "mkt"
+    if valid == "once":
+        zone = "plan"
+        eff_main = f"下一交易日（{start}）生效"
+        eff_sub = "有效期：仅下一交易日 · 系统自动计算"
+        valid_ui = "once"
+    elif valid == "range":
+        zone = "plan" if start and start > today else obj_zone
+        eff_main = f"从 {start} 起"
+        eff_sub = f"有效期：{start} ~ {end}"
+        valid_ui = "range"
+    elif valid == "ongoing":
+        zone = obj_zone
+        eff_main = "长期有效"
+        eff_sub = "有效期：长期有效"
+        valid_ui = "forever"  # 页面未暴露 ongoing；openEdit 会用 validTypeRaw 拦住
+    else:  # until_trigger
+        zone = "plan" if start and start > today else obj_zone
+        eff_main = f"从 {start} 起" if start and start > today else "立即生效"
+        eff_sub = "有效期：持续到触发 · 触发后自动失效"
+        valid_ui = "forever"
+
+    note = row["note"] or ""
+    return {
+        "id": row["id"],
+        "zone": zone,
+        "objType": obj_type,
+        "objCode": code,
+        "objName": name,
+        "name": name,
+        "sub": sub,
+        "tagCls": tag_cls,
+        "tagTxt": tag_txt,
+        "condIcon": cond_icon,
+        "condCore": cond_core,
+        "condNote": cond_note,
+        "effMain": eff_main,
+        "effSub": eff_sub,
+        "note": note,
+        "on": bool(row["enabled"]),
+        "back": {
+            "objType": obj_type,
+            "objCode": code,
+            "objName": name,
+            "condType": cond_type,
+            "dir": dir_cn,
+            "num": value,
+            "validType": valid_ui,
+            "validTypeRaw": valid,
+            "dateFrom": start,
+            "dateTo": end,
+            "note": note,
+        },
+    }
 
 
 class Api:
@@ -188,11 +472,231 @@ class Api:
                       "note": r["note"] or "", "triggered_at": r["triggered_at"],
                       "actual_value": r["actual_value"], "notify_state": r["notify_state"],
                       "acked": bool(r["acked"])} for r in rows]
-            enabled = conn.execute(
-                "SELECT COUNT(*) c FROM alerts WHERE deleted = 0 AND enabled = 1").fetchone()["c"]
+            enabled = _alert_enabled_count(conn)
             return {"enabled_count": enabled, "today": items}
         finally:
             conn.close()
+
+    # ---------- 盯盘提醒规则（1A：只做真实保存，不做检查/通知/历史） ----------
+    def get_alert_page(self):
+        """提醒管理页数据：真实规则 + 真实对象清单 + 启用数。
+
+        规则返回页面现有视图模型形状（zone/name/cond/eff/back 等），
+        页面只替换数据源，不重写已验收的渲染结构。
+        """
+        conn = None
+        try:
+            conn = dbm.connect()
+            today = dbm.today_str()
+            rows = conn.execute(
+                "SELECT a.*, f.name AS fund_name, f.fund_type AS fund_type,"
+                " m.name AS mkt_name, m.mkt_type AS mkt_type"
+                " FROM alerts a"
+                " LEFT JOIN fund_meta f ON f.code = a.fund_code"
+                " LEFT JOIN market_meta m ON m.code = a.mkt_code"
+                " WHERE a.deleted = 0"
+                " ORDER BY a.id"
+            ).fetchall()
+            rules = [_alert_rule_vm(r, today) for r in rows]
+
+            # 真实基金对象：持有 + 关注；同一代码按 holding 优先去重。
+            fund_rows = conn.execute(
+                "SELECT h.fund_code, h.status, f.name, f.fund_type"
+                " FROM holdings h JOIN fund_meta f ON f.code = h.fund_code"
+                " WHERE h.deleted = 0 AND h.status IN ('holding','watch')"
+                " ORDER BY CASE h.status WHEN 'holding' THEN 0 ELSE 1 END,"
+                " h.open_date, h.fund_code"
+            ).fetchall()
+            funds, seen = [], set()
+            for r in fund_rows:
+                code = r["fund_code"]
+                if code in seen:
+                    continue
+                seen.add(code)
+                status = r["status"]
+                status_label = "持有" if status == "holding" else "关注"
+                fund_type = r["fund_type"] or ""
+                funds.append({
+                    "code": code,
+                    "name": r["name"] or code,
+                    "status": status,
+                    "statusLabel": status_label,
+                    "tagCls": _fund_tag_cls(fund_type),
+                    "tagTxt": fund_type or "基金",
+                    "sub": f"{code} · {status_label}",
+                })
+
+            # 真实指数对象：market_meta 出厂预置（当前只有 9 个指数，不伪造赛道/黄金）。
+            market_rows = conn.execute(
+                "SELECT code, name, mkt_type, market FROM market_meta"
+                " WHERE enabled = 1 ORDER BY display_order, code"
+            ).fetchall()
+            markets = [{
+                "code": r["code"],
+                "name": r["name"],
+                "mktType": r["mkt_type"],
+                "market": r["market"],
+                "tagCls": "tag-blue",
+                "tagTxt": _market_tag_txt(r["mkt_type"]),
+            } for r in market_rows]
+
+            return {
+                "ok": True,
+                "rules": rules,
+                "funds": funds,
+                "markets": markets,
+                "enabled_count": _alert_enabled_count(conn),
+            }
+        except Exception as e:
+            return {"ok": False, "error": f"读取提醒失败：{e}"}
+        finally:
+            if conn:
+                conn.close()
+
+    def create_alert(self, payload):
+        """新建提醒规则；只落库，不检查、不通知。"""
+        conn = None
+        try:
+            conn = dbm.connect()
+            data = _alert_validate(conn, payload)
+            now = dbm.now_str()
+            cur = conn.execute(
+                "INSERT INTO alerts (uuid, obj_type, fund_code, mkt_code, cond_type,"
+                " direction, cond_value, valid_type, start_date, end_date, triggered_at,"
+                " note, enabled, deleted, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0, ?, ?)",
+                (uuid.uuid4().hex, data["obj_type"], data["fund_code"], data["mkt_code"],
+                 data["cond_type"], data["direction"], data["cond_value"],
+                 data["valid_type"], data["start_date"], data["end_date"],
+                 data["note"], data["enabled"], now, now),
+            )
+            conn.commit()
+            return {"ok": True, "id": cur.lastrowid}
+        except ValueError as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return {"ok": False, "error": str(e)}
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return {"ok": False, "error": f"保存提醒失败：{e}"}
+        finally:
+            if conn:
+                conn.close()
+
+    def update_alert(self, aid, payload):
+        """编辑提醒规则；保留 uuid/created_at，默认保留启用状态。"""
+        conn = None
+        try:
+            aid = _alert_id(aid)
+            conn = dbm.connect()
+            existing = conn.execute(
+                "SELECT * FROM alerts WHERE id = ? AND deleted = 0", (aid,)
+            ).fetchone()
+            if not existing:
+                return {"ok": False, "error": "提醒不存在或已删除"}
+            data = _alert_validate(conn, payload, existing)
+            # triggered_at 只允许 until_trigger 非空（数据库 CHECK 要求）。
+            triggered_at = (existing["triggered_at"]
+                            if data["valid_type"] == "until_trigger" else None)
+            conn.execute(
+                "UPDATE alerts SET obj_type=?, fund_code=?, mkt_code=?, cond_type=?,"
+                " direction=?, cond_value=?, valid_type=?, start_date=?, end_date=?,"
+                " triggered_at=?, note=?, enabled=?, updated_at=?"
+                " WHERE id = ? AND deleted = 0",
+                (data["obj_type"], data["fund_code"], data["mkt_code"],
+                 data["cond_type"], data["direction"], data["cond_value"],
+                 data["valid_type"], data["start_date"], data["end_date"],
+                 triggered_at, data["note"], data["enabled"], dbm.now_str(), aid),
+            )
+            conn.commit()
+            return {"ok": True, "id": aid}
+        except ValueError as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return {"ok": False, "error": str(e)}
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return {"ok": False, "error": f"更新提醒失败：{e}"}
+        finally:
+            if conn:
+                conn.close()
+
+    def set_alert_enabled(self, aid, enabled):
+        """启用/暂停一条提醒；重复设置同一状态也成功（幂等）。"""
+        conn = None
+        try:
+            aid = _alert_id(aid)
+            conn = dbm.connect()
+            row = conn.execute(
+                "SELECT deleted FROM alerts WHERE id = ?", (aid,)
+            ).fetchone()
+            if not row:
+                return {"ok": False, "error": "提醒不存在"}
+            if row["deleted"]:
+                return {"ok": False, "error": "提醒已删除"}
+            conn.execute(
+                "UPDATE alerts SET enabled = ?, updated_at = ? WHERE id = ? AND deleted = 0",
+                (1 if _truthy(enabled) else 0, dbm.now_str(), aid),
+            )
+            conn.commit()
+            return {"ok": True, "id": aid}
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return {"ok": False, "error": f"更新提醒失败：{e}"}
+        finally:
+            if conn:
+                conn.close()
+
+    def delete_alert(self, aid):
+        """软删除一条提醒；重复删除同一 id 也成功（幂等）。"""
+        conn = None
+        try:
+            aid = _alert_id(aid)
+            conn = dbm.connect()
+            row = conn.execute(
+                "SELECT deleted FROM alerts WHERE id = ?", (aid,)
+            ).fetchone()
+            if not row:
+                return {"ok": False, "error": "提醒不存在"}
+            if not row["deleted"]:
+                conn.execute(
+                    "UPDATE alerts SET deleted = 1, enabled = 0, updated_at = ? WHERE id = ?",
+                    (dbm.now_str(), aid),
+                )
+                conn.commit()
+            return {"ok": True, "id": aid}
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return {"ok": False, "error": f"删除提醒失败：{e}"}
+        finally:
+            if conn:
+                conn.close()
 
     # ---------- 通知偏好（2026-09-26 用户重新明确；SQLite settings 是唯一真实来源） ----------
     def get_notify_settings(self):

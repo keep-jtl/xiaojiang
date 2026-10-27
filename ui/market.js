@@ -208,18 +208,26 @@
     foot.textContent = lastCheckAt ? '净值最近检查于 ' + lastCheckAt : '';
   }
 
-  /* ---------- 渲染：今日提醒（真实空态） ---------- */
+  /* ---------- 渲染：今日提醒（1A 只存规则，检查/触发尚未接通） ---------- */
   function renderAlerts (d) {
     var box = document.getElementById('alertList');
+    var n = Number(d.enabled_count || 0);
     if (!d.today.length) {
-      box.innerHTML =
-        '<div class="alert-empty"><b>' +
-        (d.enabled_count ? '今天没有触发的提醒' : '还没有设过提醒') + '</b>' +
-        '<p>达到你设置的条件才会提醒你，平时保持安静' +
-        (d.enabled_count ? '。' : '：去「盯盘提醒」设一个试试。') + '</p></div>';
+      if (n > 0) {
+        box.innerHTML =
+          '<div class="alert-empty"><b>已启用 ' + n + ' 条提醒</b>' +
+          '<p>提醒检查尚未接通；下一阶段接入后，达到条件才会提醒你。</p></div>';
+      } else {
+        box.innerHTML =
+          '<div class="alert-empty"><b>还没有设过提醒</b>' +
+          '<p>去「盯盘提醒」设一个；检查与通知将在下一阶段接入。</p></div>';
+      }
       return;
     }
-    box.innerHTML = d.today.map(function (a) {
+    var countLine = n > 0
+      ? '<div style="font-size:12px;color:var(--ink-3);margin-bottom:6px;">启用中 ' + n + ' 条</div>'
+      : '';
+    box.innerHTML = countLine + d.today.map(function (a) {
       var text = a.obj_name ? esc(a.obj_name) + ' ' : '';
       text += a.note ? esc(a.note) : '达到了你设置的条件';
       return '<div class="alert-item"><span class="alert-dot orange"></span>' +
