@@ -55,8 +55,8 @@ ITEM_LABEL = {
     "9.01": "财务报表附件",
 }
 
-LOOKBACK_DAYS = 7
-MAX_PER_COMPANY = 6
+LOOKBACK_DAYS = 14       # 必须覆盖 14 天，确保第 8～14 天财报不漏抓
+MAX_PER_COMPANY = 12     # 14 天窗口内多份公告时避免财报被截断
 _CACHE_SECONDS = 2 * 3600
 _TICKER_CACHE = {"ts": 0.0, "map": None}
 _SUB_CACHE = {}  # cik -> (ts, data)
@@ -192,10 +192,12 @@ def fetch_company(ticker, days=LOOKBACK_DAYS, ua=None):
             "ticker": ticker,
             "company": company,
             "form": form,
+            "doc_description": desc,
             "raw_json": json.dumps({
                 "cik": cik, "ticker": ticker, "company": company, "form": form,
                 "filingDate": filing_date, "reportDate": (recent.get("reportDate") or [None] * n)[i],
                 "accessionNumber": acc, "items": items_code,
+                "docDescription": desc,
             }, ensure_ascii=False),
         })
         if len(items) >= MAX_PER_COMPANY:

@@ -223,8 +223,9 @@
             </div>
           </div>
           <div class="funnel">
-            <div class="fseg"><b id="funnelTotal">—</b><span>近 7 天官方事件</span></div>
-            <div class="fseg keep"><b id="funnelRelated">—</b><span>与你有关</span></div>
+            <div class="fseg"><b id="funnelTotal">—</b><span>近 7 天实时</span></div>
+            <div class="fseg keep"><b id="funnelRelated">—</b><span>实时与你有关</span></div>
+            <div class="fseg keep"><b id="funnelReport">—</b><span>近 14 天财报</span></div>
             <div class="fseg keep"><b id="funnelTop">—</b><span>最重要（已进小结）</span></div>
           </div>
           <div class="daily-list" id="dailyList"></div>
@@ -239,7 +240,12 @@
         </div>
 
         <div class="sub-list" id="followList"></div>
-        <div class="empty-hint" id="followEmpty">近 7 天暂时没有与你有关的事件。</div>
+        <div class="empty-hint" id="followEmpty">近 7 天实时暂时没有与你有关的事件。</div>
+
+        <div class="card-title" style="margin-top:16px;">近 14 天财报 <span class="hint" id="reportCnt">—</span></div>
+        <div class="sub-list" id="reportList"></div>
+        <div class="empty-hint" id="reportEmpty">近 14 天暂时没有与你有关的财报。</div>
+
         <div class="card-hint" id="newsStatus" style="margin-top:10px; line-height:1.8;">正在读取真实市场事件…</div>
       </div><!-- /followZone -->
 
@@ -267,11 +273,12 @@
         <div class="card-hint">当前只保存你的通知偏好；真正的 Windows/macOS 系统通知还在开发中。市场事件与盯盘提醒的通知开关相互独立。</div>
       </div>
 
-      <!-- 近 7 天与你有关 -->
+      <!-- 实时 7 天 / 财报 14 天 -->
       <div class="card">
-        <div class="card-title">近 7 天与你有关 <span class="hint">真实数据</span></div>
+        <div class="card-title">实时 7 天 / 财报 14 天 <span class="hint">真实数据</span></div>
         <div class="stat-grid">
-          <div class="s-item hot"><div class="v" id="stRel">—</div><div class="l">与你有关的事件</div></div>
+          <div class="s-item hot"><div class="v" id="stRel">—</div><div class="l">实时与你有关</div></div>
+          <div class="s-item hot"><div class="v" id="stReport">—</div><div class="l">财报与你有关</div></div>
           <div class="s-item hot"><div class="v" id="stTop">—</div><div class="l">最重要 · 在近期小结</div></div>
           <div class="s-item"><div class="v" id="stUnread">0</div><div class="l">未读</div></div>
           <div class="s-item"><div class="v" id="stFav">0</div><div class="l">已收藏</div></div>
@@ -339,6 +346,18 @@
       c.style.display = on ? '' : 'none';
       if (on) shown++;
     });
+    if (zone === 'follow') {
+      var rel = 0, rep = 0;
+      zones.follow.querySelectorAll('#followList .msg-card').forEach(function (c) {
+        if (c.style.display !== 'none') rel++;
+      });
+      zones.follow.querySelectorAll('#reportList .msg-card').forEach(function (c) {
+        if (c.style.display !== 'none') rep++;
+      });
+      document.getElementById('followEmpty').classList.toggle('show', rel === 0);
+      document.getElementById('reportEmpty').classList.toggle('show', rep === 0);
+      return;
+    }
     var e = zones[zone].querySelector('.empty-hint');
     if (e) e.classList.toggle('show', shown === 0);
   }
@@ -410,8 +429,11 @@
   }
 
   function updateStats () {
-    var rel = zones.follow.querySelectorAll('.msg-card').length;          /* 与你有关的事件（我的关注全部） */
-    var top = zones.follow.querySelectorAll('.daily-card .msg-card').length; /* 其中进今日小结的条数 */
+    /* 实时统计含近期小结 + 实时列表；财报只算财报列表。 */
+    var rel = zones.follow.querySelectorAll(
+      '#dailyList .msg-card, #followList .msg-card').length;
+    var rep = zones.follow.querySelectorAll('#reportList .msg-card').length;
+    var top = zones.follow.querySelectorAll('#dailyList .msg-card').length;
     var unread = 0, favs = 0;
     ['follow', 'discover'].forEach(function (z) {
       zones[z].querySelectorAll('.msg-card').forEach(function (c) {
@@ -420,6 +442,7 @@
       });
     });
     document.getElementById('stRel').textContent = rel + ' 条';
+    document.getElementById('stReport').textContent = rep + ' 条';
     document.getElementById('stTop').textContent = top + ' 件';
     document.getElementById('stUnread').textContent = unread;
     document.getElementById('stFav').textContent = favs;
@@ -579,14 +602,24 @@
     var n = Number(s.item_count_7d);
     if (!isFinite(n)) {
       // 兼容旧版 API：用当前返回的近 7 天列表按来源计数。
-      n = (newsData.items || []).filter(function (x) { return x.source === s.key; }).length;
+      n = (newsData.items || []).filter(function (x) {
+        return x.source === s.key && x.news_kind !== 'report';
+      }).length;
+    }
+    var rp = Number(s.report_count_14d);
+    if (!isFinite(rp)) {
+      rp = (newsData.items || []).filter(function (x) {
+        return x.source === s.key && x.news_kind === 'report';
+      }).length;
     }
     if (st === 'ok') {
-      parts.push(n > 0 ? ('近 7 天 ' + n + ' 条') : '近 7 天无新增');
+      parts.push(n > 0 ? ('近 7 天实时 ' + n + ' 条') : '近 7 天实时无新增');
+      if (rp > 0) parts.push('近 14 天财报 ' + rp + ' 条');
     } else {
       if (s.last_error) parts.push(s.last_error);
       else if (st === 'waiting') parts.push('尚未执行抓取');
-      if (n > 0) parts.push('近 7 天 ' + n + ' 条（旧数据）');
+      if (n > 0) parts.push('近 7 天实时 ' + n + ' 条（旧数据）');
+      if (rp > 0) parts.push('近 14 天财报 ' + rp + ' 条（旧数据）');
     }
     var latest = s.latest_item_at;
     if (!latest) {
@@ -683,36 +716,49 @@
   function renderNews (data) {
     newsData = data || {};
     var items = (newsData.items || []).filter(function (i) { return i.funds && i.funds.length; });
-    var top = items.filter(function (i) { return (i.score || 0) >= 0.7; });
+    var realtime = items.filter(function (i) { return i.news_kind !== 'report'; });
+    var reports = items.filter(function (i) { return i.news_kind === 'report'; });
+    var top = realtime.filter(function (i) { return (i.score || 0) >= 0.7; });
     var daily = top.slice(0, 3);
     var dailyIds = {};
     daily.forEach(function (i) { dailyIds[i.id] = true; });
-    var rest = items.filter(function (i) { return !dailyIds[i.id]; });
+    var rest = realtime.filter(function (i) { return !dailyIds[i.id]; });
+    var s = newsData.summary || {};
 
     document.getElementById('dailyList').innerHTML = daily.map(cardHtml).join('');
     document.getElementById('followList').innerHTML = rest.map(cardHtml).join('');
+    document.getElementById('reportList').innerHTML = reports.map(cardHtml).join('');
 
-    var s = newsData.summary || {};
-    document.getElementById('funnelTotal').textContent = (s.total_7d || 0) + ' 条';
-    document.getElementById('funnelRelated').textContent = (s.related_7d || 0) + ' 条';
+    var realtimeTotal = s.realtime_total_7d != null ? s.realtime_total_7d : (s.total_7d || 0);
+    var realtimeRelated = s.realtime_related_7d != null ? s.realtime_related_7d : (s.related_7d || 0);
+    var reportTotal = s.report_total_14d != null ? s.report_total_14d : reports.length;
+    var reportRelated = s.report_related_14d != null ? s.report_related_14d : reports.length;
+    document.getElementById('funnelTotal').textContent = realtimeTotal + ' 条';
+    document.getElementById('funnelRelated').textContent = realtimeRelated + ' 条';
+    document.getElementById('funnelReport').textContent = reportTotal + ' 条';
     document.getElementById('funnelTop').textContent = daily.length + ' 条';
+    document.getElementById('reportCnt').textContent = reportTotal + ' 条 · 与你有关 ' + reportRelated + ' 条';
 
     var headline = document.getElementById('dailyHeadline');
     var sub = document.getElementById('dailySub');
     if (items.length === 0) {
-      headline.textContent = '近 7 天暂时没有与你有关的事件';
+      headline.textContent = '近 7 天实时 / 近 14 天财报暂时没有与你有关的事件';
       sub.textContent = '没有相关事件时小财通不会显示任何内容，也不会编造或凑数。';
     } else {
-      headline.textContent = '近 7 天与你有关的事件，先看这 ' + daily.length + ' 件';
-      sub.textContent = '近 7 天官方事件 ' + (s.total_7d || 0) + ' 条，真正与你有关 ' +
-        (s.related_7d || 0) + ' 条；按关联度和重要度排序，其余在下方列表。';
+      headline.textContent = '近 7 天实时与近 14 天财报，先看这 ' + daily.length + ' 件';
+      sub.textContent = '近 7 天实时官方事件 ' + realtimeTotal + ' 条，与你有关 ' +
+        realtimeRelated + ' 条；近 14 天财报 ' + reportTotal + ' 条，与你有关 ' +
+        reportRelated + ' 条；按关联度和重要度排序。';
     }
 
     var empty = document.getElementById('followEmpty');
-    empty.textContent = items.length === 0
-      ? '近 7 天暂时没有与你有关的事件。'
-      : '该类型下没有其他相关事件——重要内容会出现在上方「近期小结」。';
+    empty.textContent = realtime.length === 0
+      ? '近 7 天实时暂时没有与你有关的事件。'
+      : '近 7 天实时没有其他相关事件——重要内容会出现在上方「近期小结」。';
     empty.classList.toggle('show', rest.length === 0);
+
+    var reportEmpty = document.getElementById('reportEmpty');
+    reportEmpty.classList.toggle('show', reports.length === 0);
 
     var status = document.getElementById('newsStatus');
     var badge = document.getElementById('dataStatusBadge');
@@ -747,9 +793,9 @@
 
     var statsHint = document.getElementById('statsHint');
     if (statsHint) {
-      statsHint.textContent = '统计口径：近 7 天官方事件 ' + (s.total_7d || 0) + ' 条 → 与你有关 ' +
-        (s.related_7d || 0) + ' 条 → 其中最重要 ' + (s.important_7d || 0) +
-        ' 条（小结展示前 ' + daily.length + ' 条）；数字全部来自真实数据。';
+      statsHint.textContent = '统计口径：近 7 天实时官方事件 ' + realtimeTotal + ' 条 → 与你有关 ' +
+        realtimeRelated + ' 条；近 14 天财报 ' + reportTotal + ' 条 → 与你有关 ' +
+        reportRelated + ' 条；近期小结展示前 ' + daily.length + ' 条。数字全部来自真实数据。';
     }
 
     updateCounts();
@@ -759,7 +805,7 @@
   function loadNews () {
     var api = window.pywebview && window.pywebview.api;
     if (!api) return;
-    api.get_news_feed(7).then(renderNews).catch(function () {
+    api.get_news_feed(14).then(renderNews).catch(function () {
       var status = document.getElementById('newsStatus');
       if (status) status.textContent = '读取市场事件失败：本机数据服务暂时不可用。';
     });

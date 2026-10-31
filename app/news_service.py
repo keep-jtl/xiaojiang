@@ -16,6 +16,7 @@ import time
 import uuid
 
 from . import db as dbm
+from . import news_rules
 from .sources import news_fed, news_sec
 
 # ---------------------------------------------------------------------------
@@ -181,12 +182,13 @@ def _insert_item(conn, item):
         return None
 
     now = dbm.now_str()
+    kind = item.get("news_kind") or news_rules.kind_for_item(item)
     cur = conn.execute(
         "INSERT INTO news_items "
-        "(uuid, source, source_id, title, summary, url, published_at, published_ts, "
+        "(uuid, source, source_id, news_kind, title, summary, url, published_at, published_ts, "
         " fetched_at, content_hash, duplicate_count, importance, raw_json, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
-        (str(uuid.uuid4()), item["source"], item["source_id"], item["title"],
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+        (str(uuid.uuid4()), item["source"], item["source_id"], kind, item["title"],
          item.get("summary"), item.get("url"), item.get("published_at"),
          item.get("published_ts"), now, h, item.get("importance", 0),
          item.get("raw_json"), now),
@@ -281,8 +283,39 @@ def _mark_result(conn, source_key, errors):
         )
 
 
+def cleanup_expired_news(conn, now_ts=None):
+    """按 published_ts 清理过期新闻及关联；只动新闻两张表。"""
+    now_ts = int(time.time()) if now_ts is None else int(now_ts)
+    realtime_cutoff = now_ts - news_rules.REALTIME_DAYS * 86400
+    report_cutoff = now_ts - news_rules.REPORT_DAYS * 86400
+    where = (
+        "published_ts IS NOT NULL AND ("
+        "(news_kind = 'report' AND published_ts < ?) OR "
+        "(COALESCE(news_kind, 'realtime') <> 'report' AND published_ts < ?))"
+    )
+    # 先删关联，再删新闻；外键级联作为双保险。
+    links = conn.execute(
+        "DELETE FROM news_item_funds WHERE news_id IN "
+        "(SELECT id FROM news_items WHERE " + where + ")",
+        (report_cutoff, realtime_cutoff),
+    )
+    news = conn.execute(
+        "DELETE FROM news_items WHERE " + where,
+        (report_cutoff, realtime_cutoff),
+    )
+    null_pub = conn.execute(
+        "SELECT COUNT(*) c FROM news_items WHERE published_ts IS NULL"
+    ).fetchone()[0]
+    return {"news": news.rowcount, "links": links.rowcount,
+            "null_published": null_pub,
+            "realtime_cutoff": realtime_cutoff, "report_cutoff": report_cutoff}
+
+
 def refresh_all(conn, notify=None):
-    """抓取两个官方源并入库；返回 {new, matched, errors, profiles}"""
+    """抓取两个官方源并入库；返回 {new, matched, errors, profiles, cleanup}"""
+    # 先清理过期新闻：即使接下来网络失败，过期项也按规则处理；不删除未过期旧新闻。
+    cleanup_start = cleanup_expired_news(conn)
+    conn.commit()
     profiles = ensure_profiles(conn)
     conn.commit()  # 画像先落盘，绝不把写锁带进后面的网络请求
     errors = []
@@ -321,9 +354,8 @@ def refresh_all(conn, notify=None):
     _mark_result(conn, "fed_rss", errs)
     conn.commit()
 
-    # 3) 只保留 30 天，避免缓存无限增长
-    cutoff = int(time.time()) - 30 * 86400
-    conn.execute("DELETE FROM news_items WHERE published_ts IS NOT NULL AND published_ts < ?", (cutoff,))
+    # 3) 抓取结束后再清理一次，处理本轮刚跨过 7/14 天边界的新闻。
+    cleanup_end = cleanup_expired_news(conn)
     conn.commit()
 
     if notify:
@@ -331,7 +363,8 @@ def refresh_all(conn, notify=None):
                 "new": new_total, "matched": matched_total,
                 "at": dbm.now_str()})
     return {"new": new_total, "matched": matched_total,
-            "errors": errors, "profiles": len(profiles)}
+            "errors": errors, "profiles": len(profiles),
+            "cleanup": {"start": cleanup_start, "end": cleanup_end}}
 
 
 def _parse_evidence(s):
@@ -341,23 +374,32 @@ def _parse_evidence(s):
         return {}
 
 
-def get_feed(conn, days=7):
+def get_feed(conn, days=14, now_ts=None):
     """给界面读取的新闻列表 + 真实统计 + 逐源/整体状态。
 
     sources[].status: ok 成功 / skipped 按设计跳过 / error 实际失败 / waiting 未执行；
     overall_status: ok / partial / failed / waiting；
     last_attempt_at / last_success_at / latest_item_at 三类时间严格分开。
+    显示窗口按类型分开：realtime 7 天、report 14 天。
     """
-    cutoff = int(time.time()) - int(days) * 86400
+    now_ts = int(time.time()) if now_ts is None else int(now_ts)
+    window_days = max(int(days or 0), news_rules.REPORT_DAYS)
+    query_cutoff = now_ts - window_days * 86400
+    realtime_cutoff = now_ts - news_rules.REALTIME_DAYS * 86400
+    report_cutoff = now_ts - news_rules.REPORT_DAYS * 86400
     rows = conn.execute(
         "SELECT * FROM news_items WHERE published_ts IS NOT NULL AND published_ts >= ? "
         "ORDER BY published_ts DESC, importance DESC LIMIT 500",
-        (cutoff,),
+        (query_cutoff,),
     ).fetchall()
 
     items = []
     today = dbm.today_str()
     for r in rows:
+        kind = r["news_kind"] or news_rules.kind_from_raw(r["source"], r["raw_json"])
+        keep_cutoff = report_cutoff if kind == "report" else realtime_cutoff
+        if r["published_ts"] < keep_cutoff:
+            continue
         ms = conn.execute(
             "SELECT nif.fund_code, nif.relation_type, nif.score, nif.evidence, m.name "
             "FROM news_item_funds nif LEFT JOIN fund_meta m ON m.code = nif.fund_code "
@@ -377,20 +419,18 @@ def get_feed(conn, days=7):
             raw = json.loads(r["raw_json"] or "{}")
         except Exception:
             raw = {}
-        if r["source"] == "sec_edgar":
+        if kind == "report":
+            cat = "report"
+        elif r["source"] == "sec_edgar":
             form = raw.get("form", "")
-            if form in ("10-K", "10-Q"):
-                cat = "report"
-            elif form == "6-K":
-                cat = "announce"
-            else:
-                cat = "event"
+            cat = "announce" if form == "6-K" else "event"
         else:
             cat = "policy"
         items.append({
             "id": r["id"],
             "source": r["source"],
             "source_name": SOURCE_NAMES.get(r["source"], r["source"]),
+            "news_kind": kind,
             "title": r["title"],
             "summary": r["summary"] or "",
             "url": r["url"] or "",
@@ -408,19 +448,28 @@ def get_feed(conn, days=7):
     related = [i for i in items if i["funds"]]
     today_related = [i for i in today_items if i["funds"]]
     important = [i for i in today_related if i["score"] >= 0.7]
-    important_7d = [i for i in related if i["score"] >= 0.7]
+    realtime_items = [i for i in items if i["news_kind"] != "report"]
+    report_items = [i for i in items if i["news_kind"] == "report"]
+    realtime_related = [i for i in realtime_items if i["funds"]]
+    report_related = [i for i in report_items if i["funds"]]
+    realtime_important = [i for i in realtime_related if i["score"] >= 0.7]
+    report_important = [i for i in report_related if i["score"] >= 0.7]
 
     # 逐源统计近 N 天条数和最新文章时间（最新文章时间取缓存内全部条目，用于和“检查时间”区分）
     stat_rows = conn.execute(
         "SELECT source,"
-        " SUM(CASE WHEN published_ts IS NOT NULL AND published_ts >= ? THEN 1 ELSE 0 END) AS c,"
+        " SUM(CASE WHEN published_ts IS NOT NULL AND published_ts >= ? "
+        "  AND COALESCE(news_kind,'realtime') <> 'report' THEN 1 ELSE 0 END) AS realtime_c,"
+        " SUM(CASE WHEN published_ts IS NOT NULL AND published_ts >= ? "
+        "  AND news_kind = 'report' THEN 1 ELSE 0 END) AS report_c,"
         " MAX(published_at) AS latest_item_at"
         " FROM news_items GROUP BY source",
-        (cutoff,),
+        (realtime_cutoff, report_cutoff),
     ).fetchall()
     item_stats = {
         r["source"]: {
-            "item_count_7d": int(r["c"] or 0),
+            "item_count_7d": int(r["realtime_c"] or 0),
+            "report_count_14d": int(r["report_c"] or 0),
             "latest_item_at": r["latest_item_at"],
         }
         for r in stat_rows
@@ -436,6 +485,7 @@ def get_feed(conn, days=7):
             "last_error": s["last_error"],
             "status": _source_status(s),
             "item_count_7d": stat.get("item_count_7d", 0),
+            "report_count_14d": stat.get("report_count_14d", 0),
             "latest_item_at": stat.get("latest_item_at"),
         })
     last_success = max([s["last_success_at"] for s in sources if s["last_success_at"]] or [None])
@@ -451,9 +501,15 @@ def get_feed(conn, days=7):
             "total": len(today_items),
             "related": len(today_related),
             "important": len(important),
-            "total_7d": len(items),
-            "related_7d": len(related),
-            "important_7d": len(important_7d),
+            "total_7d": len(realtime_items),
+            "related_7d": len(realtime_related),
+            "important_7d": len(realtime_important),
+            "realtime_total_7d": len(realtime_items),
+            "realtime_related_7d": len(realtime_related),
+            "realtime_important_7d": len(realtime_important),
+            "report_total_14d": len(report_items),
+            "report_related_14d": len(report_related),
+            "report_important_14d": len(report_important),
         },
         "sources": sources,
         "last_success_at": last_success,
@@ -463,5 +519,5 @@ def get_feed(conn, days=7):
         "partial": overall_status == "partial",
         "stale": stale,
         "today": today,
-        "window_days": int(days),
+        "window_days": window_days,
     }

@@ -19,6 +19,8 @@
 import os
 import sqlite3
 
+from . import news_rules
+
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 DB_PATH = os.path.join(DATA_DIR, "xltc.db")
 
@@ -269,6 +271,8 @@ CREATE TABLE IF NOT EXISTS news_items (
     uuid            TEXT NOT NULL UNIQUE,
     source          TEXT NOT NULL,               -- sec_edgar / fed_rss
     source_id       TEXT NOT NULL,               -- 源内唯一 ID
+    news_kind       TEXT NOT NULL DEFAULT 'realtime'
+                    CHECK (news_kind IN ('realtime','report')), -- 实时7天/财报14天
     title           TEXT NOT NULL,
     summary         TEXT,
     url             TEXT,
@@ -337,6 +341,21 @@ def today_str():
     return datetime.date.today().isoformat()
 
 
+def _ensure_news_kind_v5(conn):
+    """v4→v5：给 news_items 增加分类字段，并只做保守回填，不删除新闻。"""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(news_items)")}
+    if "news_kind" not in cols:
+        conn.execute(
+            "ALTER TABLE news_items ADD COLUMN news_kind TEXT NOT NULL DEFAULT 'realtime'"
+        )
+    # 旧 6-K 没有 docDescription 证据 → 保持 realtime；旧 10-K/10-Q/8-K 2.02 回填 report。
+    for r in conn.execute("SELECT id, source, raw_json FROM news_items").fetchall():
+        if news_rules.kind_from_raw(r["source"], r["raw_json"]) == "report":
+            conn.execute(
+                "UPDATE news_items SET news_kind = 'report' WHERE id = ?", (r["id"],)
+            )
+
+
 def init_db():
     """建库建表 + 种子数据（幂等，可重复调用）"""
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -353,6 +372,14 @@ def init_db():
             conn.execute(
                 "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '4', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = '4', updated_at = excluded.updated_at",
+                (now,),
+            )
+        if ver < 5:
+            # v4 → v5：新闻分类字段；只回填，不清理任何新闻。
+            _ensure_news_kind_v5(conn)
+            conn.execute(
+                "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '5', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = '5', updated_at = excluded.updated_at",
                 (now,),
             )
         conn.execute(

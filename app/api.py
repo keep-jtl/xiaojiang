@@ -746,10 +746,11 @@ class Api:
         })
 
     # ---------- 市场事件（阶段一：SEC + 美联储） ----------
-    def get_news_feed(self, days=7):
+    def get_news_feed(self, days=14):
         """真实市场事件列表 + 真实统计 + 数据源状态。
 
         只返回数据库里已有的事件；页面据 summary 显示真实条数。
+        窗口按类型过滤：实时 7 天、财报 14 天。
         没有相关事件时 funds 为空，绝不编造或凑数。
         """
         conn = dbm.connect()
