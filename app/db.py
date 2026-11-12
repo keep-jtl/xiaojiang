@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""小财通本地数据库（SQLite）——schema v2 落地（2026-09-03 用户确认）
+"""小财通本地数据库（SQLite）——schema v6 迁移基线（2026-11-06，1B）
 
 表分类：
 - 用户数据（将来云同步范围）：holdings / invest_events / alerts / alert_events / settings
@@ -12,8 +12,9 @@
 - 提醒有效期四模式：once 仅下一交易日 / until_trigger 持续到触发 / ongoing 长期有效 / range 指定范围；
   triggered_at 仅属 until_trigger（其余模式由 CHECK 锁死为 NULL），ongoing 同日不重复完全由
   alert_events 的 UNIQUE(alert_id, trigger_date) 承担
-- 触发三态原则："条件触发"≠"提醒成功"——alert_events.notify_state 区分 sent/skipped，
-  acked 记录用户在软件内确认；until_trigger 仅当送达或确认后才视为完成
+- 触发三态原则："条件触发"≠"提醒成功"——alert_events.notify_state 是旧兼容字段（sent/skipped）；
+  1B 起新增 notify_result（pending/submitted/failed/skipped）+ notify_error，新逻辑只看新字段；
+  until_trigger 在触发事件成功写入后立即失效（不再等待通知送达/用户确认），acked 仍单独记录用户确认
 - 业务表带 uuid（云同步全局键预留）+ deleted 软删标记（仅 holdings/alerts）
 """
 import os
@@ -178,7 +179,7 @@ CREATE TABLE IF NOT EXISTS alerts (
                    -- 有效期四模式：仅下一交易日/持续到触发/长期有效/指定日期范围
     start_date   TEXT,                       -- 生效开始日；NULL=立即（仅 until_trigger/ongoing）
     end_date     TEXT,                       -- 生效结束日；NULL=无截止（仅 until_trigger/ongoing）
-    triggered_at TEXT,                       -- 仅 until_trigger 使用：首次触发「送达或确认」后写入即失效；
+    triggered_at TEXT,                       -- 仅 until_trigger 使用：首次触发事件成功写入后即失效；
                    -- 其余模式恒 NULL（CHECK 强制），ongoing 的"今日已触发"绝不落此字段
     note         TEXT,                       -- 用户备注（仅自己可见，软件不解读）
     enabled      INTEGER NOT NULL DEFAULT 1, -- 1=启用 0=暂停
@@ -213,7 +214,11 @@ CREATE TABLE IF NOT EXISTS alert_events (
                   -- realtime=实时检查触发 / recover=关机睡眠恢复后的补偿检查
     notify_state  TEXT    NOT NULL DEFAULT 'skipped'
                   CHECK (notify_state IN ('sent','skipped')),
-                  -- sent=通知开启且成功发出 / skipped=通知关闭未弹（触发三态：已触发但未通知）
+                  -- 旧兼容字段：sent=通知开启且已提交 / skipped=未提交；新逻辑不使用本字段做判断
+    notify_result TEXT    NOT NULL DEFAULT 'pending'
+                  CHECK (notify_result IN ('pending','submitted','failed','skipped')),
+                  -- 1B 通知结果：pending=待尝试 / submitted=已提交系统 / failed=发送失败 / skipped=开关关闭或通道跳过
+    notify_error  TEXT,                      -- 通知失败/跳过原因（可空）
     acked         INTEGER NOT NULL DEFAULT 0,
                   -- 用户是否在软件内看到并确认本次触发（三态原则：软件内确认也算"提醒成功"）
     created_at    TEXT NOT NULL,
@@ -356,6 +361,41 @@ def _ensure_news_kind_v5(conn):
             )
 
 
+def _ensure_alert_events_v6(conn):
+    """v5→v6：给 alert_events 增加通知结果字段和 triggered_at 索引。
+
+    只做 ADD COLUMN + 回填，不重建表、不删除任何触发记录。
+    旧 notify_state 映射：sent→submitted，其余→skipped；新事件默认 pending。
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(alert_events)")}
+    added_result = False
+    if "notify_result" not in cols:
+        try:
+            conn.execute(
+                "ALTER TABLE alert_events ADD COLUMN notify_result TEXT NOT NULL "
+                "DEFAULT 'pending' CHECK (notify_result IN ('pending','submitted','failed','skipped'))"
+            )
+        except sqlite3.OperationalError:
+            # 个别 SQLite 版本对 ADD COLUMN + CHECK 兼容性不同；退化为普通列，写入值由代码校验。
+            conn.execute(
+                "ALTER TABLE alert_events ADD COLUMN notify_result TEXT NOT NULL DEFAULT 'pending'"
+            )
+        added_result = True
+    if "notify_error" not in cols:
+        conn.execute("ALTER TABLE alert_events ADD COLUMN notify_error TEXT")
+    if added_result:
+        conn.execute(
+            "UPDATE alert_events SET notify_result = CASE "
+            "WHEN notify_state = 'sent' THEN 'submitted' ELSE 'skipped' END "
+            "WHERE notify_result = 'pending'"
+        )
+    # 索引必须在列已存在后创建；不能写进 SCHEMA_SQL（旧库 executescript 时还没有新列）。
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_alert_events_triggered_at "
+        "ON alert_events(triggered_at)"
+    )
+
+
 def init_db():
     """建库建表 + 种子数据（幂等，可重复调用）"""
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -380,6 +420,14 @@ def init_db():
             conn.execute(
                 "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '5', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = '5', updated_at = excluded.updated_at",
+                (now,),
+            )
+        if ver < 6:
+            # v5 → v6：提醒通知结果字段 + 首页 triggered_at 索引；不重建表、不删事件。
+            _ensure_alert_events_v6(conn)
+            conn.execute(
+                "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '6', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = '6', updated_at = excluded.updated_at",
                 (now,),
             )
         conn.execute(
