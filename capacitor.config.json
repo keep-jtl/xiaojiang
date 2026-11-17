@@ -1,0 +1,13 @@
+{
+  "appId": "com.keepjtl.xiaolicaitong",
+  "appName": "小财通",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

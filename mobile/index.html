@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f5f1">
+  <title>小财通</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-img" src="./brand/xltc-logo.png?v=r4.3" alt="小财通">
+      <span class="brand-name">小财通</span>
+      <span class="preview-badge" id="topVersionBadge">PREVIEW …</span>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn btn-small" id="refreshBtn">刷新数据</button>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <main class="views">
+    <!-- ==================== 首页 ==================== -->
+    <section class="view active" id="view-home" data-view="home">
+      <div class="view-head"><h1>首页</h1><span>今天先看这里 · 市场与提醒</span></div>
+
+      <section class="home-snapshot">
+        <div class="label"><span id="homeLabel">今日概览</span> <span class="home-tag" id="homeTag" hidden>数据不完整</span></div>
+        <div class="total num" id="homeTotal">—</div>
+        <div class="row">
+          <span>今日盈亏<b class="num" id="homeToday">—</b></span>
+          <span>持有基金<b class="num" id="homeCount">—</b></span>
+          <span>组合状态<b>本地数据</b></span>
+        </div>
+        <div class="foot" id="homeFoot">正在读取本地数据…</div>
+      </section>
+
+      <div class="home-quick three">
+        <button class="btn btn-primary" id="homeAddBtn">＋ 添加基金</button>
+        <button class="btn" id="homeRefreshBtn">刷新数据</button>
+        <button class="btn btn-ghost" id="homeFundsBtn">查看持仓 ›</button>
+      </div>
+
+      <div class="card home-card">
+        <div class="card-title">市场速览 <span class="hint" id="homeMarketHint">读取中…</span></div>
+        <div class="home-market" id="homeMarket"><div class="loading">正在获取真实行情…</div></div>
+      </div>
+
+      <div class="card home-card">
+        <div class="card-title">最新市场事件 <span class="hint" id="homeNewsAt">—</span>
+          <button class="btn btn-small btn-ghost" id="homeNewsAll">查看全部 ›</button>
+        </div>
+        <div class="home-feed" id="homeNews"><div class="loading">正在读取市场事件…</div></div>
+      </div>
+
+      <div class="card home-card">
+        <div class="card-title">盯盘提醒 <span class="hint">规则在本机运行</span>
+          <button class="btn btn-small btn-ghost" id="homeAlertsMore">查看 ›</button>
+        </div>
+        <div id="homeAlerts"><div class="loading">正在读取提醒规则…</div></div>
+      </div>
+
+      <footer class="disclaimer">
+        <div>首页只做今日快照；持仓明细、成本、清仓记录在「基金」页。</div>
+        <div>数据来源：天天基金公开接口（净值）；腾讯公开行情源（指数）；美联储 / BLS 官方 RSS（市场事件，英文自动译为中文）。</div>
+      </footer>
+    </section>
+
+    <!-- ==================== 我的基金 ==================== -->
+    <section class="view" id="view-funds" data-view="funds">
+      <div class="view-head"><h1>我的基金</h1><span>持仓明细 · 成本与清仓</span></div>
+
+      <section class="summary summary-compact" id="fundsSummary">
+        <div class="label"><span id="fundsLabel">资产总览 · 完整组合</span> <span class="home-tag" id="fundsTag" hidden>数据不完整</span></div>
+        <div class="total num" id="totalValue">—</div>
+        <div class="row">
+          <span>累计收益<b class="num" id="totalProfit">—</b></span>
+          <span>今日盈亏<b class="num" id="todayProfit">—</b></span>
+          <span>持有基金<b class="num" id="holdingCount">—</b></span>
+        </div>
+        <div class="foot" id="summaryFoot">正在读取本地数据…</div>
+      </section>
+
+      <button class="btn analysis-entry" id="fundsAnalysisBtn">组合体检 · 看看我的组合状态 ›</button>
+
+      <div class="toolbar">
+        <button class="btn btn-primary" id="addBtn">＋ 添加基金</button>
+        <span class="meta" id="lastRefresh">尚未刷新净值</span>
+      </div>
+
+        <div class="list-title">
+        <h2>持仓明细</h2>
+        <span id="listCount"></span>
+      </div>
+      <section class="holdings" id="holdings">
+        <div class="loading">正在读取本地 SQLite…</div>
+      </section>
+
+      <section id="closedSection" hidden>
+        <div class="list-title"><h2>已清仓</h2><span id="closedCount"></span></div>
+        <div class="holdings" id="closedList"></div>
+      </section>
+
+      <footer class="disclaimer">
+        <div>本页只包含“我的基金”：真实搜索、净值、持仓与本地保存。</div>
+        <div>数据仅保存在本机 SQLite；卸载应用会删除本地数据。</div>
+      </footer>
+    </section>
+
+    <!-- ==================== 市场事件 ==================== -->
+    <section class="view" id="view-news" data-view="news">
+      <div class="view-head"><h1>市场事件</h1><span id="newsStatus">真实官方 RSS</span></div>
+
+      <div class="filter-chips" id="newsFilters">
+        <button class="chip active" data-filter="all">全部</button>
+        <button class="chip" data-filter="related">与持仓相关</button>
+        <button class="chip" data-filter="discover">市场发现</button>
+        <button class="chip" data-filter="fav">收藏</button>
+      </div>
+
+      <div class="news-summary" id="newsSummary">
+        <div class="news-kpi"><b id="newsCount">—</b><small>条真实事件</small></div>
+        <div class="news-kpi"><b id="newsRelated">—</b><small>与持仓相关</small></div>
+        <div class="news-kpi"><b id="newsAt">—</b><small>最近刷新</small></div>
+      </div>
+
+      <div class="card news-fetch-card" id="newsFetchCard" hidden>
+        <p id="newsFetchText"></p>
+        <button class="btn btn-small" id="newsRetry">重新抓取</button>
+      </div>
+
+      <div class="news-list" id="newsList">
+        <div class="loading">正在读取官方市场事件…</div>
+      </div>
+
+      <footer class="disclaimer">
+        <div>来源：美联储（Federal Reserve）与美国劳工统计局（BLS）官方 RSS；英文标题与摘要自动译为中文，原文可对照。</div>
+        <div>“与持仓相关”为宏观关联标注，不代表对单只基金的公司级公告；研究参考，不构成投资建议。</div>
+      </footer>
+    </section>
+
+    <!-- ==================== 提醒 ==================== -->
+    <section class="view" id="view-alerts" data-view="alerts">
+      <div class="view-head"><h1>盯盘提醒</h1><span id="alertStatus">读取中…</span></div>
+
+      <div class="alert-stat" id="alertStats">
+        <div><b id="alertRuleCount">—</b><small>启用规则</small></div>
+        <div><b id="alertTriggerCount">—</b><small>累计触发</small></div>
+        <div><b id="alertNotifyState">—</b><small>系统通知</small></div>
+      </div>
+
+      <div class="alert-actions">
+        <button class="btn btn-primary" id="addAlertBtn">＋ 新建提醒</button>
+        <button class="btn" id="checkAlertsBtn">立即检查</button>
+        <button class="btn" id="notifyPermissionBtn">开启系统通知</button>
+      </div>
+      <div class="alert-notice" id="alertNotice" hidden></div>
+
+      <div class="list-title"><h2>我的规则</h2><span id="ruleCount"></span></div>
+      <div id="alertRules" class="alert-list">
+        <div class="loading">正在读取本地提醒规则…</div>
+      </div>
+
+      <div class="list-title"><h2>触发历史</h2><span>最近 50 条</span></div>
+      <div id="alertHistory" class="alert-history">
+        <div class="empty">还没有触发记录。规则命中后会写入本机历史，并尝试发送 Android 系统通知。</div>
+      </div>
+
+      <footer class="disclaimer">
+        <div>检查范围：腾讯公开指数行情 + 本机已保存的最新基金净值；不联网估算、不伪造触发。</div>
+        <div>前台每 60 秒检查一次；切到后台时系统可能暂停网页计时器，重新打开后会立即补检。</div>
+      </footer>
+    </section>
+
+    <!-- ==================== 我的 ==================== -->
+    <section class="view" id="view-me" data-view="me">
+      <div class="view-head"><h1>我的</h1><span>本地优先</span></div>
+
+      <div class="card home-card">
+        <div class="card-title">小财通<span class="dev-badge" id="devBadge" hidden>开发测试版</span></div>
+        <div class="brand-preview">
+          <img class="brand-preview-img" src="./brand/xltc-mark.png?v=r4.3" alt="小财通图标">
+          <div><b>品牌图标</b><small>纸页 + Python 双蛇标志</small></div>
+        </div>
+        <div class="set-line"><span>版本</span><b id="aboutVersion">—</b></div>
+        <div class="set-line"><span>市场事件</span><b>已接入官方 RSS</b></div>
+        <div class="set-line"><span>盯盘提醒</span><b id="meAlertState">已接入本地规则</b></div>
+        <div class="set-line"><span>系统通知</span><b id="meNotifyState">读取中…</b></div>
+        <p class="card-note dev-note" id="devNote" hidden>仅供内部测试，不支持对原发布签名版本直接覆盖升级。</p>
+        <div class="set-line"><span>定位</span><b>本地个人基金研究工具</b></div>
+        <div class="set-line"><span>交易</span><b>不交易、不荐基、不预测涨跌</b></div>
+      </div>
+
+      <div class="card home-card">
+        <div class="card-title">外观</div>
+        <div class="set-line"><span>当前主题</span><b id="themeLabel">跟随系统</b></div>
+        <p class="card-note">可手动切换浅色 / 深色；选择会保存在本机。</p>
+        <div class="theme-actions">
+          <button class="btn btn-small" data-theme-choice="system">跟随系统</button>
+          <button class="btn btn-small" data-theme-choice="light">浅色</button>
+          <button class="btn btn-small" data-theme-choice="dark">深色</button>
+        </div>
+      </div>
+
+      <div class="card home-card">
+        <div class="card-title">数据与隐私</div>
+        <div class="set-line"><span>净值来源</span><b>天天基金公开接口</b></div>
+        <div class="set-line"><span>行情来源</span><b>腾讯公开指数行情</b></div>
+        <div class="set-line"><span>市场事件</span><b>美联储 / BLS 官方 RSS</b></div>
+        <div class="set-line"><span>数据保存</span><b>本机 SQLite，不上传</b></div>
+        <p class="card-note">卸载应用会删除本地数据；没有账号系统，没有云同步。</p>
+      </div>
+
+      <footer class="disclaimer">
+        <div>第三方组件许可见安装包内 THIRD_PARTY_NOTICES.md。</div>
+        <div>研究参考，不构成投资建议。</div>
+      </footer>
+    </section>
+
+    <!-- ==================== 组合体检（独立 View，不占 Tab） ==================== -->
+    <section class="view" id="view-analysis" data-view="analysis">
+      <div class="view-head">
+        <button class="btn btn-small btn-ghost" id="analysisBack">‹ 返回</button>
+        <h1>组合体检</h1>
+        <span>客观数据 · 不评级</span>
+      </div>
+      <div id="analysisBody"><div class="loading">正在读取本地持仓…</div></div>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab active" data-tab="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></svg>
+      <span>首页</span>
+    </button>
+    <button class="tab" data-tab="funds">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 10h18"/><path d="M7 15h4"/></svg>
+      <span>基金</span>
+    </button>
+    <button class="tab" data-tab="news">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h13v14H5a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1Z"/><path d="M17 8h3v9a2 2 0 0 1-2 2H7"/><path d="M7 8h6M7 11h6M7 14h4"/></svg>
+      <span>事件</span>
+    </button>
+    <button class="tab" data-tab="alerts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+      <span>提醒</span>
+    </button>
+    <button class="tab" data-tab="me">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+      <span>我的</span>
+    </button>
+  </nav>
+
+  <div class="modal-mask" id="addModal" hidden>
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>添加基金</h2>
+        <button class="btn btn-small btn-ghost" id="closeAddBtn">关闭</button>
+      </div>
+
+      <div class="field">
+        <label for="searchInput">搜索基金代码或名称</label>
+        <input id="searchInput" inputmode="search" autocomplete="off" placeholder="如 005827 或 易方达蓝筹">
+      </div>
+      <div class="search-results" id="searchResults">
+        <div class="search-hint">输入关键词后搜索全市场基金（首次约需下载 3MB 名单）。</div>
+      </div>
+
+      <div id="selectedBox" hidden>
+        <div class="preview-box" id="navPreview">正在获取最新真实净值…</div>
+        <div class="field-row">
+          <div class="field">
+            <label for="costInput">持仓成本价（元/份）</label>
+            <input id="costInput" type="number" inputmode="decimal" min="0" step="0.0001" placeholder="例如 1.4023">
+          </div>
+          <div class="field">
+            <label for="sharesInput">持有份额</label>
+            <input id="sharesInput" type="number" inputmode="decimal" min="0" step="0.0001" placeholder="例如 5000">
+          </div>
+        </div>
+        <div class="preview-box" id="calcPreview" hidden></div>
+        <div class="sheet-actions">
+          <button class="btn btn-ghost" id="cancelAddBtn">取消</button>
+          <button class="btn btn-primary" id="confirmAddBtn" disabled>添加到我的基金</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-mask" id="ruleModal" hidden>
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>新建盯盘提醒</h2>
+        <button class="btn btn-small btn-ghost" id="closeRuleBtn">关闭</button>
+      </div>
+
+      <div class="field">
+        <label>提醒对象</label>
+        <select id="ruleObject">
+          <optgroup label="指数">
+            <option value="">正在读取行情…</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="ruleCondType">条件类型</label>
+          <select id="ruleCondType">
+            <option value="pct">日涨跌幅</option>
+            <option value="line">价格 / 净值</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ruleDirection">方向</label>
+          <select id="ruleDirection">
+            <option value="up">达到或高于</option>
+            <option value="down">达到或低于</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="ruleValue" id="ruleValueLabel">触发值（%）</label>
+        <input id="ruleValue" type="number" inputmode="decimal" min="0" step="0.01" placeholder="例如 2 表示 2%">
+      </div>
+
+      <div class="field">
+        <label for="ruleValid">触发后</label>
+        <select id="ruleValid">
+          <option value="until_trigger">条件消失后可再次触发</option>
+          <option value="once">触发一次后关闭规则</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="ruleNote">备注（可选）</label>
+        <input id="ruleNote" maxlength="80" placeholder="例如：跌破 3000 点提醒我看看">
+      </div>
+
+      <div class="sheet-actions">
+        <button class="btn btn-ghost" id="cancelRuleBtn">取消</button>
+        <button class="btn btn-primary" id="saveRuleBtn">保存提醒</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小财通 · 设置</title>
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    if (localStorage.getItem('xltc-theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    var a = localStorage.getItem('xltc-accent');
+    if (a) document.documentElement.dataset.accent = a;
+  })();
+</script>
+<style>
+  .set-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .set-grid { grid-template-columns: 1fr; } }
+  .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .set-row:last-child { border-bottom: none; }
+  .set-row .t b { display: block; font-size: 13.5px; }
+  .set-row .t span { display: block; color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+  .set-modes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .set-mode { border: 1px solid var(--card-border); background: none; color: var(--ink-2); border-radius: 9px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .set-mode.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+  .set-swatches { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .set-swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .set-swatch.active { border-color: var(--ink); }
+  .dev-tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--tag-orange-bg); color: var(--tag-orange-ink); white-space: nowrap; }
+  .set-note { color: var(--ink-2); font-size: 12.5px; line-height: 1.8; }
+  .brand-preview { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+  .brand-preview-dot {
+    width: 64px; height: 64px; border-radius: 20px; flex: 0 0 auto;
+    background: var(--logo-grad); box-shadow: 0 6px 18px rgba(47,111,237,.22);
+  }
+  .brand-preview b { display: block; font-size: 14px; }
+  .brand-preview small { display: block; color: var(--ink-3); font-size: 12px; margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo"><img class="logo-img" src="assets/brand/xltc-logo.png?v=r4.3" alt="小财通"><span class="logo-text">小财通</span></div>
+    <nav class="nav" id="mainNav"></nav>
+    <div class="topbar-right">
+      <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">设置</div>
+  <div class="page-sub">外观、通知、后台运行与登录自启动均已接通；所有开关写入本机，不伪装可用。</div>
+
+  <div class="set-grid">
+    <div class="card">
+      <div class="card-title">外观</div>
+      <div class="set-row" style="display:block;">
+        <div class="t"><b>外观模式</b><span>切换后立即生效，并记住在本机。</span></div>
+        <div class="set-modes">
+          <button class="set-mode" data-mode="light">☀️ 浅色</button>
+          <button class="set-mode" data-mode="dark">🌙 深色</button>
+        </div>
+      </div>
+      <div class="set-row" style="display:block;">
+        <div class="t"><b>主题颜色</b><span>只用于按钮、导航、链接和重点元素；红涨绿跌不受影响。</span></div>
+        <div class="set-swatches" id="swatches"></div>
+      </div>
+      <div class="set-row" style="display:block;">
+        <div class="t"><b>品牌图标</b><span>桌面窗口、任务栏、安装包、手机端与启动图使用同一套“Python 文件图标 + Python 双蛇”品牌。</span></div>
+        <div class="brand-preview">
+          <img class="brand-preview-img" src="assets/brand/xltc-mark.png?v=r4.3" alt="小财通品牌图标" style="width:64px;height:64px;border-radius:16px;object-fit:contain;background:#faf7f0;">
+          <div><b>小财通</b><small>纸页 + Python 双蛇标志</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">通知</div>
+      <div class="set-row">
+        <div class="t"><b>通知总开关（市场事件 + 盯盘提醒）</b><span>关闭后只影响是否弹出系统通知，不影响规则检查。</span></div>
+        <span class="switch" id="settingsNotifySwitch" title="点击开关启用/关闭"></span>
+      </div>
+      <div class="set-row">
+        <div class="t"><b>测试通知</b><span id="settingsNotifyStatus">发送一条真实 Windows 通知，确认能否收到。</span></div>
+        <button class="btn btn-ghost btn-sm" id="settingsTestBtn">发送测试</button>
+      </div>
+      <div class="set-row">
+        <div class="t"><b>系统通知设置</b><span>收不到时，检查 Windows 通知总开关或勿扰模式。</span></div>
+        <button class="btn btn-ghost btn-sm" id="settingsOpenNotify">打开设置</button>
+      </div>
+      <div class="set-note" style="margin-top:8px;">关闭后，盯盘规则仍会继续检查，触发记录仍保存，但不弹 Windows 通知；如需停止监控，到「盯盘提醒」暂停规则。手机版已接 Android 本地通知，但只在应用前台时按 60 秒检查，离开应用不保证持续盯盘。</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">数据与隐私</div>
+      <div class="set-row">
+        <div class="t"><b>数据来源</b><span>天天基金公开净值接口；行情来自公开行情源。</span></div>
+      </div>
+      <div class="set-row">
+        <div class="t"><b>数据保存</b><span>持仓、设置只保存在本机 SQLite；没有账号系统，不上传云端。</span></div>
+      </div>
+      <div class="set-row">
+        <div class="t"><b>提醒与通知</b><span>盯盘提醒由后台引擎每 60 秒检查，触发后自动推送；免打扰下用桌面横幅。</span></div>
+        <span class="tag tag-green">已接通</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">后台运行</div>
+      <div class="set-row">
+        <div class="t"><b>关闭主窗口</b><span id="closeToTrayDesc">最小化到系统托盘，后台继续刷新行情与提醒。</span></div>
+        <div class="set-modes">
+          <button class="set-mode" data-close="tray">最小化到托盘</button>
+          <button class="set-mode" data-close="exit">直接退出</button>
+        </div>
+      </div>
+      <div class="set-row">
+        <div class="t"><b>登录时自动启动</b><span id="autoStartStatus">读取当前用户的开机启动项…</span></div>
+        <span class="switch" id="settingsAutoStart" title="点击开关启用/关闭"></span>
+      </div>
+      <div class="set-row">
+        <div class="t"><b>托盘 / 菜单栏图标</b><span id="trayStatus">正在检查托盘…</span></div>
+        <span class="tag tag-green" id="trayTag">检测中</span>
+      </div>
+      <div class="set-note" style="margin-top:8px;">关闭到托盘后，点击托盘图标可重新打开主窗口；右键菜单可选择“显示小财通 / 退出”。开机自启写入当前用户 HKCU，不需要管理员权限。</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">关于</div>
+      <div class="set-row"><div class="t"><b>小财通</b><span>Preview 0.1.0-preview-r4.2</span></div></div>
+      <div class="set-row"><div class="t"><b>定位</b><span>本地优先的个人基金研究工具；不交易、不荐基、不预测涨跌。</span></div></div>
+      <div class="set-row"><div class="t"><b>许可</b><span>第三方组件许可见安装包内 THIRD_PARTY_NOTICES.md。</span></div></div>
+    </div>
+  </div>
+</main>
+
+<script src="nav.js"></script>
+<script src="theme.js"></script>
+<script src="notify.js"></script>
+<script>
+(function () {
+  'use strict';
+  var ACCENTS = [
+    { key: 'blue', name: '蓝色', color: '#2f6fed' },
+    { key: 'mistblue', name: '雾蓝', color: '#5a8fd6' },
+    { key: 'cyan', name: '青色', color: '#14a3b0' },
+    { key: 'purple', name: '紫色', color: '#7a5cf0' },
+    { key: 'orange', name: '橙色', color: '#f07f2a' },
+    { key: 'slate', name: '灰蓝', color: '#5d7a9e' }
+  ];
+  var box = document.getElementById('swatches');
+  box.innerHTML = ACCENTS.map(function (a) {
+    return '<button class="set-swatch" data-accent="' + a.key + '" title="' + a.name +
+      '" style="background:' + a.color + '"></button>';
+  }).join('');
+
+  function current () {
+    return {
+      theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+      accent: document.documentElement.dataset.accent || 'blue'
+    };
+  }
+  function render () {
+    var c = current();
+    document.querySelectorAll('.set-mode[data-mode]').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.mode === c.theme);
+    });
+    document.querySelectorAll('.set-swatch').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.accent === c.accent);
+    });
+  }
+  document.querySelectorAll('.set-mode[data-mode]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.documentElement.dataset.theme = b.dataset.mode;
+      localStorage.setItem('xltc-theme', b.dataset.mode);
+      render();
+    });
+  });
+  document.querySelectorAll('.set-swatch').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.documentElement.dataset.accent = b.dataset.accent;
+      localStorage.setItem('xltc-accent', b.dataset.accent);
+      render();
+    });
+  });
+  render();
+}());
+
+/* 通知：真实系统通知测试与偏好开关（2026-11-09） */
+(function () {
+  'use strict';
+  var sw = document.getElementById('settingsNotifySwitch');
+  var btn = document.getElementById('settingsTestBtn');
+  var status = document.getElementById('settingsNotifyStatus');
+  var open = document.getElementById('settingsOpenNotify');
+
+  function anyOn () {
+    return xltcNotify.flag('news_enabled', false) || xltcNotify.flag('alerts_enabled', false);
+  }
+  function render () { sw.classList.toggle('on', anyOn()); }
+  xltcNotify.onChange(render);
+  xltcNotify.capabilities().then(function (cap) {
+    if (cap && cap.toast_enabled === false) {
+      status.textContent = 'Windows 系统通知当前是关闭的；请点“打开设置”开启后再测试。';
+    }
+  }).catch(function () { /* 能力读取失败不阻断页面 */ });
+
+  sw.addEventListener('click', function () {
+    var v = !anyOn();
+    xltcNotify.set({ news_enabled: v, alerts_enabled: v });
+  });
+
+  btn.addEventListener('click', function () {
+    btn.disabled = true;
+    status.textContent = '正在发送测试通知…';
+    xltcNotify.sendTest('generic').then(function (r) {
+      btn.disabled = false;
+      if (r && r.ok && r.toast_enabled === false) {
+        status.textContent = '已提交，但 Windows 系统通知总开关当前是关闭的，可能收不到；请点“打开设置”开启后再试。';
+      } else {
+        status.textContent = (r && r.ok)
+          ? (r.app_id === 'powershell'
+            ? '已提交（来源显示为 PowerShell）；新事件会自动推送'
+            : '已发送到 Windows 通知中心；新事件会自动推送')
+          : '发送失败：' + ((r && r.error) || '未知原因');
+      }
+    }).catch(function (err) {
+      btn.disabled = false;
+      status.textContent = '发送失败：' + (err && err.message ? err.message : '本机通知服务不可用');
+    });
+  });
+
+  open.addEventListener('click', function () {
+    xltcNotify.openSettings().then(function (r) {
+      if (!r || !r.ok) status.textContent = '打开失败：' + ((r && r.error) || '未知原因');
+    }).catch(function (err) {
+      status.textContent = '打开失败：' + (err && err.message ? err.message : '本机服务不可用');
+    });
+  });
+}());
+
+/* ---- 桌面后台设置：关闭到托盘、登录自启、托盘状态（真实读写） ---- */
+(function () {
+  var current = { close_to_tray: true, autostart: { enabled: false, available: false } };
+  var closeButtons = Array.prototype.slice.call(document.querySelectorAll('[data-close]'));
+  var autoSwitch = document.getElementById('settingsAutoStart');
+
+  function apiReady() { return window.pywebview && window.pywebview.api; }
+
+  function paint() {
+    closeButtons.forEach(function (b) {
+      var isTray = b.dataset.close === 'tray';
+      b.classList.toggle('active', isTray === !!current.close_to_tray);
+    });
+    document.getElementById('closeToTrayDesc').textContent = current.close_to_tray
+      ? '最小化到系统托盘，后台继续刷新行情与提醒。'
+      : '关闭窗口即退出，后台刷新和提醒会一起停止。';
+    document.getElementById('autoStartStatus').textContent = current.autostart.enabled
+      ? '已开启：登录 Windows 后自动以最小化方式启动小财通。'
+      : (current.autostart.available === false
+        ? '当前系统不支持自动读取开机启动项。'
+        : '未开启：登录 Windows 后不会自动启动。');
+    autoSwitch.classList.toggle('on', !!current.autostart.enabled);
+    var trayTag = document.getElementById('trayTag');
+    var trayStatus = document.getElementById('trayStatus');
+    if (current.tray_running === true) {
+      trayTag.textContent = '已运行';
+      trayStatus.textContent = 'Windows 原生托盘已启动：左键显示窗口，右键可退出。';
+    } else if (current.tray_running === false) {
+      trayTag.textContent = '未启动';
+      trayStatus.textContent = '托盘没有启动成功；关闭窗口仍会按上面的选择处理。';
+    } else {
+      trayTag.textContent = '未检测';
+      trayStatus.textContent = '当前不在打包窗口环境，无法检测托盘。';
+    }
+  }
+
+  function load() {
+    var api = apiReady();
+    if (!api || !api.get_desktop_settings) return;
+    api.get_desktop_settings().then(function (r) {
+      if (r) {
+        current.close_to_tray = !!r.close_to_tray;
+        current.autostart = r.autostart || current.autostart;
+        current.tray_running = r.tray_running;
+        paint();
+      }
+    }).catch(function () {
+      document.getElementById('trayStatus').textContent = '读取设置失败；本机数据服务暂不可用。';
+    });
+  }
+
+  closeButtons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!apiReady()) return;
+      var wantTray = b.dataset.close === 'tray';
+      closeButtons.forEach(function (x) { x.disabled = true; });
+      apiReady().set_close_to_tray(wantTray).then(function (r) {
+        closeButtons.forEach(function (x) { x.disabled = false; });
+        if (r && r.ok) { current.close_to_tray = !!r.close_to_tray; paint(); }
+      }).catch(function () { closeButtons.forEach(function (x) { x.disabled = false; }); });
+    });
+  });
+
+  autoSwitch.addEventListener('click', function () {
+    if (!apiReady() || autoSwitch.dataset.busy === '1') return;
+    var want = !current.autostart.enabled;
+    autoSwitch.dataset.busy = '1';
+    apiReady().set_autostart(want).then(function (r) {
+      autoSwitch.dataset.busy = '';
+      if (r && r.ok) {
+        current.autostart = { enabled: !!r.enabled, available: true, command: r.command };
+        paint();
+      } else {
+        document.getElementById('autoStartStatus').textContent = '设置失败：' + ((r && r.error) || '无法写入 HKCU Run');
+      }
+    }).catch(function (err) {
+      autoSwitch.dataset.busy = '';
+      document.getElementById('autoStartStatus').textContent = '设置失败：' + (err && err.message ? err.message : '本机服务不可用');
+    });
+  });
+
+  var tries = 0;
+  var timer = setInterval(function () {
+    if (apiReady() && apiReady().get_desktop_settings) { clearInterval(timer); load(); }
+    else if (++tries > 100) clearInterval(timer);
+  }, 100);
+}());
+</script>
+</body>
+</html>

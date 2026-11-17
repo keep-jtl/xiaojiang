@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小财通 · 研究工具</title>
+<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    if (localStorage.getItem('xltc-theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    var a = localStorage.getItem('xltc-accent');
+    if (a) document.documentElement.dataset.accent = a;
+  })();
+</script>
+<style>
+  .research-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
+  .research-tab {
+    border: 1px solid var(--card-border); background: var(--card); color: var(--ink-2);
+    padding: 9px 20px; border-radius: 10px; font-size: 14px; cursor: pointer;
+  }
+  .research-tab.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+  .research-panel { display: none; }
+  .research-panel.active { display: block; }
+  .r-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+  .r-card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .r-card h3 { font-size: 15px; margin: 0 0 6px; line-height: 1.45; }
+  .r-card .r-sub { font-size: 12px; color: var(--ink-3); line-height: 1.65; }
+  .r-card .r-line { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
+  .r-card .r-price { font-size: 20px; font-weight: 700; }
+  .r-card .r-pct { font-size: 13px; font-weight: 600; }
+  .r-card .r-pct.up { color: var(--red); }
+  .r-card .r-pct.down { color: var(--green); }
+  .r-card .r-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .r-section-title { display: flex; align-items: baseline; gap: 8px; margin: 18px 0 10px; }
+  .r-section-title b { font-size: 14.5px; }
+  .r-section-title span { font-size: 12px; color: var(--ink-3); }
+  .r-note { font-size: 12.5px; line-height: 1.8; color: var(--ink-2); background: var(--bg-soft); border: 1px solid var(--card-border); border-radius: 10px; padding: 11px 14px; margin-bottom: 14px; }
+  .r-empty { background: var(--bg-soft); border: 1px dashed var(--line); border-radius: 12px; padding: 24px; text-align: center; color: var(--ink-3); font-size: 13px; line-height: 1.8; }
+  .r-news { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .r-news .r-news-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .r-news h3 { font-size: 14.5px; margin: 0; line-height: 1.5; }
+  .r-news .r-sum { font-size: 13px; color: var(--ink-2); margin: 6px 0 0; }
+  .r-news .r-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); margin-top: 8px; }
+  .r-news .r-foot .r-actions { margin-left: auto; display: flex; gap: 6px; }
+  .r-news .icon-btn { border: 0; background: none; cursor: pointer; font-size: 14px; padding: 2px 5px; }
+  .r-news .icon-btn.on { color: var(--brand); }
+  .r-news .icon-btn.del { color: var(--ink-3); }
+  .r-news .r-tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--brand-soft); color: var(--brand); }
+  .manager-card h3 { margin-bottom: 4px; }
+  .manager-card .manager-name { font-size: 20px; font-weight: 700; margin: 8px 0 2px; }
+  .manager-card .manager-meta { font-size: 12px; color: var(--ink-3); }
+  .research-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .research-toolbar .r-updated { font-size: 12px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo"><img class="logo-img" src="assets/brand/xltc-logo.png?v=r4.3" alt="小财通"><span class="logo-text">小财通</span></div>
+    <nav class="nav" id="mainNav"></nav>
+    <div class="topbar-right">
+      <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">研究工具</div>
+  <div class="page-sub">真实行情、真实经理资料、真实官方事件；没有数据就显示没有，不编造、不凑数。</div>
+
+  <div class="research-toolbar">
+    <button class="btn btn-sm" id="refreshResearch">刷新研究数据</button>
+    <span class="r-updated" id="researchUpdated">正在读取…</span>
+  </div>
+
+  <div class="research-tabs" id="researchTabs">
+    <button class="research-tab active" data-panel="discover">发现</button>
+    <button class="research-tab" data-panel="tracks">赛道 / 黄金</button>
+    <button class="research-tab" data-panel="managers">基金经理</button>
+    <button class="research-tab" data-panel="global">全球市场</button>
+  </div>
+
+  <section class="research-panel active" id="panel-discover">
+    <div class="r-note">官方源中<strong>没有匹配到你当前持仓</strong>的公开事件。这里只陈列真实存在的候选，不等于推荐；收藏/忽略会保存到本机 SQLite。</div>
+    <div id="discoverList"></div>
+    <div class="r-empty" id="discoverEmpty" style="display:none;">暂无未匹配持仓的官方事件。</div>
+  </section>
+
+  <section class="research-panel" id="panel-tracks">
+    <div class="r-note">赛道与黄金使用真实 ETF 行情作为代理（名称中保留“ETF”）；<strong>不是指数本身，也不是现货黄金报价</strong>。行情来自公开行情源，缺失时显示“暂无行情”，不填示例数字。</div>
+    <div class="r-grid" id="tracksList"></div>
+    <div class="r-empty" id="tracksEmpty" style="display:none;">暂无赛道/黄金行情数据。</div>
+  </section>
+
+  <section class="research-panel" id="panel-managers">
+    <div class="r-note">基金经理资料来自天天基金公开页面；只展示源站返回的现任经理。资料获取失败时保留“未获取”状态，不凭空填写姓名或业绩。</div>
+    <div class="r-grid" id="managersList"></div>
+    <div class="r-empty" id="managersEmpty" style="display:none;">当前没有持有中的基金，暂无基金经理资料。</div>
+  </section>
+
+  <section class="research-panel" id="panel-global">
+    <div class="r-note">全球市场只展示已接入的恒生、恒生科技、标普500、纳斯达克100、道琼斯等真实行情；不展示不存在的交易所或指数。</div>
+    <div id="globalList"></div>
+    <div class="r-empty" id="globalEmpty" style="display:none;">暂无可用的全球市场行情。</div>
+  </section>
+
+  <div class="demo-note">✓ 数据来自本机 SQLite 缓存与公开行情源；研究工具不构成投资建议。</div>
+</main>
+
+<script src="nav.js"></script>
+<script src="theme.js"></script>
+<script src="notify.js"></script>
+<script>
+(function () {
+  'use strict';
+  var overview = null;
+  var news = null;
+  var curPanel = 'discover';
+
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function when(s) {
+    if (!s) return '时间未知';
+    var d = new Date();
+    var iso = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    return (String(s).slice(0, 10) === iso ? '今天 ' : String(s).slice(0, 10) + ' ') + String(s).slice(11, 16);
+  }
+  function pctCls(s) {
+    if (!s) return '';
+    if (String(s).charAt(0) === '-') return 'down';
+    if (String(s).charAt(0) === '+') return 'up';
+    return '';
+  }
+  function catLabel(c) {
+    return ({ report: '财报', announce: '公告', policy: '政策', event: '重大事件' }[c] || '官方事件');
+  }
+  function api() { return window.pywebview && window.pywebview.api; }
+
+  function renderDiscover() {
+    var list = (news && news.items || []).filter(function (x) {
+      return (!x.funds || x.funds.length === 0) && !x.is_ignored;
+    });
+    var box = document.getElementById('discoverList');
+    var empty = document.getElementById('discoverEmpty');
+    if (!list.length) {
+      box.innerHTML = '';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    box.innerHTML = list.map(function (x) {
+      return '<article class="r-news" data-id="' + x.id + '">' +
+        '<div class="r-news-head"><span class="r-tag">' + esc(catLabel(x.category)) + '</span>' +
+          '<h3>' + esc(x.title) + '</h3></div>' +
+        '<p class="r-sum">' + esc(x.summary || '官方原文没有提供摘要，点击查看原文。') + '</p>' +
+        '<div class="r-foot"><span>' + esc(x.source_name) + '</span><span>·</span><span>' + esc(when(x.published_at)) + '</span>' +
+          '<span class="r-actions"><button class="icon-btn fav ' + (x.is_favorite ? 'on' : '') + '" data-act="fav" title="收藏">' + (x.is_favorite ? '★' : '☆') + '</button>' +
+          '<button class="icon-btn del" data-act="ignore" title="忽略">✕</button></span></div>' +
+        '</article>';
+    }).join('');
+  }
+
+  function marketCard(m) {
+    var price = m.price_scaled == null ? '暂无行情' : (m.price_scaled / 10000).toFixed(2);
+    var pct = m.change_pct_scaled == null ? '' : ((m.change_pct_scaled / 10000 > 0 ? '+' : '') + (m.change_pct_scaled / 10000).toFixed(2) + '%');
+    return '<div class="r-card"><h3>' + esc(m.name) + ' <span class="r-sub">' + esc(m.type_label || '') + '</span></h3>' +
+      '<div class="r-line"><span class="r-price">' + esc(price) + '</span>' +
+        (pct ? '<span class="r-pct ' + pctCls(pct) + '">' + esc(pct) + '</span>' : '') + '</div>' +
+      '<div class="r-sub">' + esc(m.code) + (m.quote_time ? ' · 行情 ' + esc(m.quote_time) : ' · 尚未获取行情') + '</div></div>';
+  }
+
+  function renderMarkets() {
+    var markets = (overview && overview.markets) || [];
+    var tracks = markets.filter(function (m) { return m.mkt_type === 'sector' || m.mkt_type === 'commodity'; });
+    var box = document.getElementById('tracksList');
+    box.innerHTML = tracks.map(marketCard).join('');
+    document.getElementById('tracksEmpty').style.display = tracks.length ? 'none' : '';
+
+    var global = markets.filter(function (m) { return m.market === 'hk' || m.market === 'us'; });
+    var gl = document.getElementById('globalList');
+    var groups = { hk: '中国香港', us: '美国' };
+    gl.innerHTML = Object.keys(groups).map(function (key) {
+      var items = global.filter(function (m) { return m.market === key; });
+      if (!items.length) return '';
+      return '<div class="r-section-title"><b>' + groups[key] + '</b><span>公开行情，非实时交易建议</span></div>' +
+        '<div class="r-grid">' + items.map(marketCard).join('') + '</div>';
+    }).join('');
+    document.getElementById('globalEmpty').style.display = global.length ? 'none' : '';
+  }
+
+  function renderManagers() {
+    var managers = (overview && overview.managers) || [];
+    var box = document.getElementById('managersList');
+    if (!managers.length) {
+      box.innerHTML = '';
+      document.getElementById('managersEmpty').style.display = '';
+      return;
+    }
+    document.getElementById('managersEmpty').style.display = 'none';
+    box.innerHTML = managers.map(function (x) {
+      var ms = x.managers || [];
+      var info = ms.map(function (m) {
+        return '<div class="manager-name">' + esc(m.name) + '</div>' +
+          '<div class="manager-meta">' + esc(m.work_time || '任期未知') +
+          (m.fund_size ? ' · 管理规模 ' + esc(m.fund_size) : '') + '</div>';
+      }).join('');
+      if (!ms.length) {
+        info = '<div class="manager-meta">' + esc(x.error || '源站暂未返回现任经理资料') + '</div>';
+      }
+      return '<div class="r-card manager-card"><h3>' + esc(x.fund_name) + '</h3>' +
+        '<div class="r-sub">' + esc(x.code) + (x.fund_type ? ' · ' + esc(x.fund_type) : '') + '</div>' +
+        info + '</div>';
+    }).join('');
+  }
+
+  function renderAll() {
+    document.getElementById('researchUpdated').textContent =
+      (overview && overview.at ? '读取于 ' + overview.at : '尚未读取');
+    renderDiscover();
+    renderMarkets();
+    renderManagers();
+  }
+
+  function load() {
+    var a = api();
+    if (!a) return;
+    document.getElementById('refreshResearch').disabled = true;
+    Promise.all([
+      a.get_research_overview().then(function (x) { overview = x || {}; }),
+      a.get_news_feed(14).then(function (x) { news = x || {}; })
+    ]).then(function () {
+      renderAll();
+      document.getElementById('refreshResearch').disabled = false;
+    }).catch(function (err) {
+      document.getElementById('researchUpdated').textContent = '读取失败：' + (err && err.message ? err.message : '本机数据服务不可用');
+      document.getElementById('refreshResearch').disabled = false;
+    });
+  }
+
+  document.getElementById('refreshResearch').addEventListener('click', load);
+
+  document.getElementById('researchTabs').addEventListener('click', function (e) {
+    var b = e.target.closest('.research-tab');
+    if (!b) return;
+    curPanel = b.dataset.panel;
+    document.querySelectorAll('.research-tab').forEach(function (x) { x.classList.toggle('active', x === b); });
+    document.querySelectorAll('.research-panel').forEach(function (p) {
+      p.classList.toggle('active', p.id === 'panel-' + curPanel);
+    });
+  });
+
+  document.getElementById('discoverList').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    var card = btn.closest('.r-news');
+    var id = Number(card.dataset.id);
+    var item = (news.items || []).filter(function (x) { return x.id === id; })[0];
+    if (!item) return;
+    if (btn.dataset.act === 'fav') {
+      var v = !item.is_favorite;
+      api().set_news_state(id, { is_favorite: v }).then(function (r) {
+        if (r && r.ok) { item.is_favorite = v ? 1 : 0; renderDiscover(); }
+      });
+    } else if (btn.dataset.act === 'ignore') {
+      api().set_news_state(id, { is_ignored: true }).then(function (r) {
+        if (r && r.ok) { item.is_ignored = 1; renderDiscover(); }
+      });
+    } else if (btn.dataset.act === 'open') {
+      api().set_news_state(id, { is_read: true });
+    }
+  });
+
+  var tries = 0;
+  var timer = setInterval(function () {
+    if (api()) { clearInterval(timer); load(); }
+    else if (++tries > 100) clearInterval(timer);
+  }, 100);
+
+  window.__xltcOnData = function (p) {
+    if (p && (p.type === 'newsUpdated' || p.type === 'dataUpdated' || p.type === 'marketQuotesUpdated')) load();
+  };
+}());
+</script>
+</body>
+</html>

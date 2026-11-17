@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小财通 · 组合体检</title>
+<link rel="stylesheet" href="style.css">
+<script>
+  // 恢复上次选择的外观模式与主题颜色（正式版在「设置 → 外观」中提供）
+  (function () {
+    if (localStorage.getItem('xltc-theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+    var a = localStorage.getItem('xltc-accent');
+    if (a) document.documentElement.dataset.accent = a;
+  })();
+</script>
+<style>
+  .report-hero { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 22px; margin-bottom: 16px; }
+  .report-hero h2 { font-size: 17px; margin-bottom: 14px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .kpi .k { font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+  .kpi .v { font-size: 18px; font-weight: 650; }
+  .note-line { margin-top: 14px; font-size: 12.5px; color: var(--ink-2); line-height: 1.7; }
+  .rtable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rtable th { text-align: left; color: var(--ink-2); font-weight: 600; font-size: 12px;
+    padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .rtable td { padding: 10px; border-bottom: 1px solid var(--line); }
+  .rtable td.num, .rtable th.num { text-align: right; white-space: nowrap; }
+  .up { color: var(--up, #d83b3b); } .down { color: var(--down, #1a9e6e); }
+  .bar { height: 8px; border-radius: 6px; background: var(--accent, #2f6fed); min-width: 4px; }
+  .bar-wrap { background: var(--line); border-radius: 6px; height: 8px; width: 160px; display:inline-block; vertical-align: middle; }
+  .muted-card { color: var(--ink-2); font-size: 13px; line-height: 1.8; }
+  .insuff { color: #b26a00; font-size: 12px; margin-top: 6px; }
+  .sec-title { font-size: 15px; font-weight: 650; margin: 22px 0 10px; }
+  .sec-sub { font-size: 12.5px; color: var(--ink-2); margin: -4px 0 10px; line-height: 1.7; }
+  .data-banner { font-size: 12.5px; color: var(--ink-2); background: var(--surface-2, #f4f6f8);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 0 0 16px;
+    line-height: 1.8; }
+  .card { padding: 18px; }
+  .card + .card { margin-top: 14px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo"><img class="logo-img" src="assets/brand/xltc-logo.png?v=r4.3" alt="小财通"><span class="logo-text">小财通</span></div>
+    <nav class="nav" id="mainNav"></nav>
+    <div class="topbar-right">
+      <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">组合体检</div>
+  <div class="page-sub">用你已有的真实持仓，几十秒看清组合状态与值得留意的地方。</div>
+
+  <div id="loading" class="report-hero muted-card">正在读取本机持仓与真实净值…</div>
+  <div id="report" style="display:none;"></div>
+</main>
+
+<script src="nav.js"></script>
+<script src="theme.js"></script>
+<script src="notify.js"></script>
+<script>
+function call (name) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  var api = window.pywebview && window.pywebview.api;
+  if (!api) return Promise.reject(new Error('本机数据服务尚未就绪，请稍等几秒再试。'));
+  return api[name].apply(null, args);
+}
+function esc (s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+// 金额：整数分 → 2 位千分位
+function money (c) {
+  if (c === null || c === undefined) return '—';
+  var neg = c < 0, a = Math.abs(c);
+  var y = Math.floor(a / 100), f = ('0' + (a % 100)).slice(-2);
+  return (neg ? '-' : '') + y.toLocaleString('zh-CN') + '.' + f;
+}
+function signMoney (c) {
+  if (c === null || c === undefined) return '—';
+  return (c > 0 ? '+' : c < 0 ? '-' : '') + money(Math.abs(c));
+}
+// 百分比：百分比数值×10000 → 2 位 + %（四舍五入，与手机端 money.js 同口径）
+function pct (sc) {
+  if (sc === null || sc === undefined) return '—';
+  var neg = sc < 0, a = Math.abs(sc);
+  var h = Math.floor((a + 50) / 100);          // 先换算到 百分比×100，再四舍五入
+  var w = Math.floor(h / 100), fr = ('0' + (h % 100)).slice(-2);
+  return (neg && h !== 0 ? '-' : '') + w + '.' + fr + '%';
+}
+function cls (sc) {
+  if (sc === null || sc === undefined) return '';
+  return sc < 0 ? 'down' : 'up';
+}
+
+function render (r) {
+  if (r.empty) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('report').style.display = 'block';
+    document.getElementById('report').innerHTML =
+      '<div class="report-hero muted-card">' + esc(r.message) + '</div>';
+    return;
+  }
+  var s = r.summary, H = '';
+
+  // 数据日前置说明（客观陈述：截止日期 + 距今天数；不冒充最新、不发明「过期」阈值）
+  var banner;
+  if (!s.nav_dates || s.nav_dates.length === 0) {
+    banner = '数据截至 —（本机暂无已公布净值，下方市值与收益暂无法计算）。';
+  } else if (s.data_age_days === null || s.data_age_days === undefined) {
+    banner = '数据截至 ' + esc(s.data_as_of) + '。';
+  } else if (s.data_age_days <= 0) {
+    banner = '数据截至 ' + esc(s.data_as_of) + '（当日净值）。';
+  } else {
+    banner = '数据截至 ' + esc(s.data_as_of) + '（距今 ' + s.data_age_days
+      + ' 天）。下方指标基于库中已有净值，未包含此后可能已公布的净值。';
+  }
+  if (s.nav_dates && s.nav_dates.length && !s.nav_date_uniform) {
+    banner += ' 各基金按最新已公布净值计算，明细处标注各自日期。';
+  }
+  if (s.complete === false && s.known_note) {
+    banner += ' ' + esc(s.known_note);
+  }
+  H += '<div class="data-banner">' + banner + '</div>';
+
+  // 总览
+  H += '<div class="report-hero"><h2>组合总览</h2>'
+    + '<div class="sec-sub">一眼看清当前持仓的规模与整体盈亏。</div>'
+    + '<div class="kpi-grid">'
+    + '<div class="kpi"><div class="k">基金数量</div><div class="v">' + s.fund_count + ' 只</div></div>'
+    + '<div class="kpi"><div class="k">总市值</div><div class="v">' + money(s.total_value_cents) + '</div></div>'
+    + '<div class="kpi"><div class="k">总成本</div><div class="v">' + money(s.total_cost_cents) + '</div></div>'
+    + '<div class="kpi"><div class="k">浮动盈亏</div><div class="v ' + cls(s.total_profit_pct_scaled) + '">'
+    + signMoney(s.total_profit_cents) + ' ' + pct(s.total_profit_pct_scaled) + '</div></div>'
+    + '</div>';
+  // 部分持仓缺净值：给「已知部分小计」并明确它不是完整组合
+  if (s.complete === false && s.known_value_cents !== null && s.known_value_cents !== undefined) {
+    H += '<div class="insuff" style="margin-top:10px;">已取得净值的 '
+      + s.valued_count + ' 只合计 ' + money(s.known_value_cents)
+      + '（已知部分小计，不是完整组合总资产）；'
+      + s.missing_nav_count + ' 只暂无净值：' + esc((s.missing_nav_codes || []).join('、'))
+      + '。完整组合总市值与收益率暂不可确定。</div>';
+  }
+  H += '<div class="note-line">最大持仓占比 ' + pct(s.largest_holding_weight_pct_scaled)
+    + '；前三大集中度 ' + pct(s.top3_concentration_pct_scaled)
+    + '；最新净值日期 ' + (s.nav_dates.length
+        ? esc(s.nav_dates.join('、')) + (s.nav_date_uniform ? '' : '（日期不统一，下方收益按各基金最新已公布净值计算）')
+        : '—（本机暂无已公布净值，市值与收益暂无法计算）')
+    + '</div></div>';
+
+  // ① 持仓结构
+  H += '<div class="sec-title">① 持仓结构</div>'
+    + '<div class="sec-sub">看看资金主要分布在哪些基金中。</div>'
+    + '<div class="card"><table class="rtable"><tr>'
+    + '<th>基金</th><th>类型</th><th class="num">市值</th><th class="num">权重</th>'
+    + '<th class="num">浮动盈亏</th><th class="num">净值日期</th></tr>';
+  r.holdings_structure.forEach(function (x) {
+    H += '<tr><td>' + esc(x.name) + '<br><small style="color:var(--ink-3)">' + x.code + '</small></td>'
+      + '<td>' + esc(x.fund_type) + '</td>'
+      + '<td class="num">' + money(x.value_cents) + '</td>'
+      + '<td class="num">' + pct(x.weight_pct_scaled) + '</td>'
+      + '<td class="num ' + cls(x.profit_pct_scaled) + '">' + signMoney(x.profit_cents)
+      + ' ' + pct(x.profit_pct_scaled) + '</td>'
+      + '<td class="num">' + esc(x.latest_nav_date) + '</td></tr>';
+  });
+  H += '</table></div>';
+
+  // ② 风险集中
+  var c = r.concentration;
+  H += '<div class="sec-title">② 风险集中（基金持仓集中度）</div>'
+    + '<div class="sec-sub">了解组合是否过度集中在少数几只基金。</div><div class="card">';
+  c.items.forEach(function (x) {
+    var w2 = Math.max(0.5, Math.min(100, x.weight_pct_scaled / 10000));
+    H += '<div style="margin:8px 0;"><span style="display:inline-block;width:170px;">'
+      + esc(x.name) + '</span><span class="bar-wrap"><span class="bar" style="display:inline-block;width:'
+      + w2 + '%;"></span></span> <span class="num" style="margin-left:8px;">'
+      + pct(x.weight_pct_scaled) + '</span></div>';
+  });
+  H += '<div class="note-line">' + esc(c.note) + '</div></div>';
+
+  // ③ 风格重复（数据不足）
+  H += '<div class="sec-title">③ 风格重复</div>'
+    + '<div class="sec-sub">需要基金底层持仓数据，目前暂不能可靠判断。</div>'
+    + '<div class="card muted-card">'
+    + esc(r.style_overlap.message) + '</div>';
+
+  // ④ 影响最大
+  var im = r.impact;
+  H += '<div class="sec-title">④ 影响最大</div>'
+    + '<div class="sec-sub">找出对当前持仓盈亏影响最大的基金。</div>'
+    + '<div class="card">'
+    + '<div style="font-weight:600;margin-bottom:8px;">最新已公布净值变动（' + esc(im.latest.label) + '）</div>';
+  im.latest.items.forEach(function (x) {
+    H += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);">'
+      + '<span>' + esc(x.name) + ' <small style="color:var(--ink-3)">' + esc(x.nav_date) + '</small></span>'
+      + '<span class="' + cls(x.contribution_cents) + '">' + signMoney(x.contribution_cents) + '</span></div>';
+  });
+  if (im.latest.items.length === 0) {
+    H += '<div class="insuff">本机暂无已公布净值，暂无可展示的净值变动数据。</div>';
+  } else if (im.latest.complete === false) {
+    H += '<div class="insuff">部分基金缺少有效净值，不合并为「组合合计」；'
+      + '已取得部分合计 ' + signMoney(im.latest.known_total_cents)
+      + '（仅供参考），下方仅展示单只贡献。</div>';
+  } else if (im.latest.total_cents === null) {
+    H += '<div class="insuff">各基金净值日期不统一，不合并为「今日组合收益」，仅展示单只贡献。</div>';
+  } else {
+    H += '<div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:650;"><span>合计</span>'
+      + '<span class="' + cls(im.latest.total_cents) + '">' + signMoney(im.latest.total_cents) + '</span></div>';
+  }
+  H += '<div style="font-weight:600;margin:16px 0 8px;">当前持仓累计浮动盈亏</div>';
+  if (im.cumulative.items.length === 0) {
+    H += '<div class="insuff">本机暂无已公布净值，累计盈亏暂无法计算。</div>';
+  } else {
+    im.cumulative.items.forEach(function (x) {
+      H += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);">'
+        + '<span>' + esc(x.name) + '</span><span class="' + cls(x.profit_pct_scaled) + '">'
+        + signMoney(x.profit_cents) + ' ' + pct(x.profit_pct_scaled) + '</span></div>';
+    });
+    H += '<div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:650;"><span>合计</span>'
+      + '<span class="' + cls(im.cumulative.total_cents) + '">' + signMoney(im.cumulative.total_cents) + '</span></div>';
+    if (im.cumulative.complete === false) {
+      H += '<div class="insuff">部分基金缺少有效净值，上方为已取得净值部分的单只盈亏，'
+        + '暂不给出完整组合累计盈亏。</div>';
+    }
+  }
+  H += '</div>';
+
+  // ⑤ 近期风险变化
+  H += '<div class="sec-title">⑤ 近期风险变化（历史净值，客观指标）</div>'
+    + '<div class="sec-sub">根据历史净值观察波动与回撤，不代表未来走势。</div>'
+    + '<div class="card"><table class="rtable"><tr>'
+    + '<th>基金</th><th class="num">近20日表现</th><th class="num">单位净值最大回撤</th>'
+    + '<th class="num">20日波动率</th><th class="num">连跌天数</th></tr>';
+  r.recent_risk.forEach(function (m) {
+    H += '<tr><td>' + esc(m.name) + '</td>'
+      + '<td class="num ' + (m.return_20_pct_scaled === null ? '' : cls(m.return_20_pct_scaled)) + '">'
+      + pct(m.return_20_pct_scaled) + '</td>'
+      + '<td class="num ' + cls(m.max_drawdown_pct_scaled) + '">' + pct(m.max_drawdown_pct_scaled) + '</td>'
+      + '<td class="num">' + pct(m.volatility_20_pct_scaled) + '</td>'
+      + '<td class="num">' + (m.nav_count === 0 ? '—' : m.down_streak_days + ' 天') + '</td></tr>';
+    if (m.insufficiencies.length)
+      H += '<tr><td colspan="5"><div class="insuff">' + esc(m.insufficiencies.join('；')) + '</div></td></tr>';
+  });
+  H += '</table><div class="note-line">' + esc(r.data_basis.drawdown_note) + '</div></div>';
+
+  // ⑥ 值得关注（客观数据，不评级）
+  var w = r.watchlist;
+  H += '<div class="sec-title">⑥ 值得关注的问题</div>'
+    + '<div class="sec-sub">汇总当前组合中值得进一步查看的客观信息。</div>'
+    + '<div class="card muted-card">'
+    + esc(w.note)
+    + '<ul style="margin:10px 0 0 18px;line-height:2;">'
+    + '<li>最大单只持仓占比 ' + pct(w.objective.max_single_weight_pct_scaled) + '</li>'
+    + '<li>前三大集中度 ' + pct(w.objective.top3_concentration_pct_scaled) + '</li>'
+    + '<li>最深单位净值回撤 ' + pct(w.objective.max_drawdown_pct_scaled) + '</li>'
+    + '<li>最新净值日期 ' + (w.objective.latest_nav_dates.length ? esc(w.objective.latest_nav_dates.join('、')) : '—') + '</li></ul></div>';
+
+  document.getElementById('loading').style.display = 'none';
+  var el = document.getElementById('report');
+  el.style.display = 'block';
+  el.innerHTML = H;
+}
+
+var readyTries = 0;
+var readyTimer = setInterval(function () {
+  if (window.pywebview && window.pywebview.api) {
+    clearInterval(readyTimer);
+    call('get_portfolio_report').then(render).catch(function (e) {
+      document.getElementById('loading').innerHTML =
+        '<div class="muted-card">读取报告失败：' + esc(e.message) + '</div>';
+    });
+  } else if (++readyTries > 100) {
+    clearInterval(readyTimer);
+    document.getElementById('loading').innerHTML =
+      '<div class="muted-card">无法连接本机数据服务。请通过「启动小财通」运行本软件；'
+      + '若已在运行仍出现此提示，请关闭软件后重新打开。</div>';
+  }
+}, 100);
+</script>
+</body>
+</html>

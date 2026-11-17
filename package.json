@@ -1,0 +1,22 @@
+{
+  "name": "xiaolicaitong-preview",
+  "version": "0.1.0-preview-r4.3",
+  "private": true,
+  "type": "module",
+  "description": "小财通 v0.1.0-preview Android shell",
+  "scripts": {
+    "build": "vite build --config mobile/vite.config.js",
+    "cap:sync": "npm run build && cap sync android",
+    "android:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor-community/sqlite": "8.1.1",
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/local-notifications": "^8.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0",
+    "vite": "8.3.6"
+  }
+}
