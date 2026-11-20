@@ -51,9 +51,9 @@
     var f = ('0' + (a % 100)).slice(-2);
     return (neg ? '-' : '') + y.toLocaleString('zh-CN') + '.' + f;
   }
-  function moneySign (c) {        // 带符号：+23,456.70 / -7,092.47
+  function moneySign (c) {        // 带符号：+23,456.70 / -7,092.47；零不带符号
     if (c === null || c === undefined) return '—';
-    return (c >= 0 ? '+' : '-') + money(Math.abs(c));
+    return (c > 0 ? '+' : c < 0 ? '-' : '') + money(Math.abs(c));
   }
   function isPlus (s) {           // 兼容数字与字符串（纪律同 funds.html）
     if (typeof s === 'number') return s >= 0;
@@ -62,7 +62,7 @@
   function upDown (s) { return isPlus(s) ? 'up' : 'down'; }
   function esc (s) { return String(s === null || s === undefined ? '' : s); }
 
-  var state = { sessions: null, quotes: [], holdingCodes: [] };
+  var state = { sessions: null, quotes: [], holdingCodes: [], holdings: [], watch: [], news: null };
 
   /* 首页 8 只真实指数（用户 2026-09-05 确认清单；恒生科技留作盯盘提醒预设，不进首页） */
   var HOME_CODES = ['sh000300', 'sh000001', 'sh000905', 'sz399006',
@@ -95,7 +95,8 @@
         MARKET_NAMES[m] + ' · ' + x.label + '</span>';
     }).join('');
     var hero = document.getElementById('sessionHero');
-    if (s.summary) hero.textContent = s.summary; else hero.textContent = '—';
+    hero.textContent = s.summary || '—';
+    hero.title = s.summary || '';   /* 窄卡片里省略时，悬停可看完整状态 */
     // 警告（如某年官方日历未公布）暂存，由脚注统一展示（不打断页面）
     state.warningMsg = (s.warnings && s.warnings.length) ? s.warnings[0] : '';
   }
@@ -116,7 +117,7 @@
       val = '<b class="num">—</b><span>暂不可用</span>';
     }
     return '<div class="mkt-row' + (primary ? ' primary' : q.available ? '' : ' unavailable') + '">' +
-      '<div class="mkt-name">' + esc(q.name) + '<small>' +
+      '<div class="mkt-name" title="' + esc(q.name) + '">' + esc(q.name) + '<small>' +
       (q.available ? '昨收 ' + esc(q.prev_str || '—') : '本机暂无行情记录') + '</small></div>' +
       '<div class="mkt-val">' + val + '</div>' +
       '<span class="mkt-status" title="' + tipFor(q) + '"></span>' +
@@ -181,34 +182,63 @@
      视觉与已验收首页一致：资产卡收益用普通字色（asset-hero 不红绿），
      红涨绿跌只用于市场行情行。金额全在 Python 侧算好，界面只显示。 ---------- */
   function renderHero (summary, holdingCount, lastCheckAt) {
-    var none = summary.total_cents === null || summary.total_cents === undefined;
-    document.getElementById('heroTotal').textContent = none ? '—' : '¥ ' + money(summary.total_cents);
-    var today = document.getElementById('heroToday');
-    if (summary.today_profit_cents === null || summary.today_profit_cents === undefined) {
-      today.textContent = '—';
+    var complete = summary.complete === true;
+    var hasKnown = summary.known_value_cents !== null && summary.known_value_cents !== undefined;
+    var label = document.getElementById('heroLabel');
+    var tag = document.getElementById('heroTag');
+
+    // 标题口径：部分缺失 → 已估值持仓市值（x/y 只）+ 数据不完整；其余 → 我的总资产
+    if (holdingCount && !complete && hasKnown) {
+      label.textContent = '已估值持仓市值（' + summary.valued_count + '/' + holdingCount + ' 只）';
+      tag.hidden = false;
     } else {
+      label.textContent = '我的总资产';
+      tag.hidden = true;
+    }
+
+    // 主金额：完整 → 完整总市值；部分缺失 → 已估值部分小计；全无净值 → —
+    var mainCents = complete ? summary.total_cents
+      : (hasKnown ? summary.known_value_cents : null);
+    document.getElementById('heroTotal').textContent =
+      mainCents === null || mainCents === undefined ? '—' : '¥ ' + money(mainCents);
+
+    // 今日盈亏：完整 → 完整合计；部分缺失 → 已估值部分（明确标注）；全无 → —
+    var today = document.getElementById('heroToday');
+    if (complete && summary.today_profit_cents !== null && summary.today_profit_cents !== undefined) {
       today.textContent = moneySign(summary.today_profit_cents) +
         (summary.today_pct_str ? '（' + summary.today_pct_str + '%）' : '');
+    } else if (!complete && summary.known_today_profit_cents !== null &&
+               summary.known_today_profit_cents !== undefined) {
+      today.textContent = moneySign(summary.known_today_profit_cents) + '（已估值部分）';
+    } else {
+      today.textContent = '—';
     }
+
+    // 累计收益 / 持仓收益率：完整口径；部分缺失时一律 —，不留下错误指标
     document.getElementById('heroProfit').textContent =
-      summary.profit_cents === null || summary.profit_cents === undefined
-        ? '—' : moneySign(summary.profit_cents);
+      complete && summary.profit_cents !== null && summary.profit_cents !== undefined
+        ? moneySign(summary.profit_cents) : '—';
     document.getElementById('heroRate').textContent =
-      summary.profit_pct_str ? summary.profit_pct_str + '%' : '—';
+      complete && summary.profit_pct_str ? summary.profit_pct_str + '%' : '—';
     document.getElementById('heroCount').textContent = holdingCount + ' 只';
-    // 底部提示行：无持仓 → 引导添加；有持仓 → 显示"净值最近检查于"
-    // 2026-09-26 口径修正：显示的是"最近一次真正联网检查净值"的时刻，不是"净值更新了"。
-    // 休市日联网成功但没有新净值时，这里的时间照样前进（确实查过），
-    // 而卡片数字不变（确实没有新数据），两者不矛盾。
+    // 底部提示行
     var foot = document.getElementById('heroFoot');
     if (!holdingCount) {
       foot.innerHTML = '还没有持仓：<a href="funds.html">去添加你持有的基金</a>';
       return;
     }
-    foot.textContent = lastCheckAt ? '净值最近检查于 ' + lastCheckAt : '';
+    if (!complete && hasKnown) {
+      // 首页克制：只留一句原因，具体基金代码放组合体检页
+      foot.textContent = summary.known_note ||
+        '部分持仓缺少有效净值，数字不是完整组合总市值。';
+    } else {
+      foot.textContent = lastCheckAt
+        ? '最近刷新 ' + lastCheckAt + ' · 净值与市场事件同一周期'
+        : '';
+    }
   }
 
-  /* ---------- 渲染：今日提醒（1A 只存规则，检查/触发尚未接通） ---------- */
+  /* ---------- 渲染：今日提醒（引擎已接通，真实状态驱动） ---------- */
   function renderAlerts (d) {
     var box = document.getElementById('alertList');
     var n = Number(d.enabled_count || 0);
@@ -216,11 +246,11 @@
       if (n > 0) {
         box.innerHTML =
           '<div class="alert-empty"><b>已启用 ' + n + ' 条提醒</b>' +
-          '<p>提醒检查尚未接通；下一阶段接入后，达到条件才会提醒你。</p></div>';
+          '<p>程序运行期间会持续检查；今天还没有触发，达到条件会在这里提醒你。</p></div>';
       } else {
         box.innerHTML =
           '<div class="alert-empty"><b>还没有设过提醒</b>' +
-          '<p>去「盯盘提醒」设一个；检查与通知将在下一阶段接入。</p></div>';
+          '<p>去「盯盘提醒」设一个；达到条件后会在程序运行时提醒你。</p></div>';
       }
       return;
     }
@@ -234,6 +264,84 @@
         '<div class="t"><b>' + text + '</b>' +
         '<small class="time">触发于 ' + esc(a.triggered_at || '') + '</small></div></div>';
     }).join('');
+  }
+
+  /* ---------- 渲染：首页第二行「市场事件」 ----------
+     只用真实 get_news_feed 数据，只取与持仓/关注有关的事件；
+     没有相关事件时明确空态，不拿无关新闻凑数。 ---------- */
+  function newsCat (i) {
+    if (i.news_kind === 'report') return '财报';
+    if (i.category === 'policy') return '政策';
+    if (i.category === 'announce') return '公告';
+    return '事件';
+  }
+  function renderHomeNews (feed) {
+    var box = document.getElementById('homeNews');
+    if (!box) return;
+    state.news = feed;
+    var items = ((feed && feed.items) || []).filter(function (i) {
+      return i && i.funds && i.funds.length;
+    }).slice(0, 4);
+    if (!items.length) {
+      box.innerHTML = '<div class="alert-empty"><b>近期没有与你持仓相关的事件</b>' +
+        '<p>没有相关事件时小财通不会拿无关新闻凑数；可去「市场事件」查看全部。</p></div>';
+      return;
+    }
+    box.innerHTML = items.map(function (i) {
+      var fundNames = i.funds.map(function (f) { return f.name; });
+      var rel = fundNames.slice(0, 2).join('、') + (fundNames.length > 2 ? ' 等' : '');
+      var title = i.title_zh || i.title;
+      var summary = (i.summary_zh || i.summary || '').slice(0, 140);
+      return '<div class="msg-item home-msg">' +
+        '<div class="msg-tags"><span class="tag tag-blue">' + esc(newsCat(i)) + '</span>' +
+        (i.title_zh ? '<span class="tag">自动翻译</span>' : '') + '</div>' +
+        '<div class="t">' + esc(title) + '</div>' +
+        (summary ? '<div class="m">' + esc(summary) + '</div>' : '') +
+        '<div class="m">与你的持仓相关：' + esc(rel) + '</div>' +
+        '<div class="foot">' + esc(i.source_name || i.source || '') +
+        ' · ' + esc(i.published_at || '') + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* ---------- 渲染：首页第二行「值得关注」 ----------
+     优先 watch 关注基金；没有 watch 时取持仓中最新披露日
+     涨跌幅绝对值最大的 3 只。每行必须显示净值日期，避免把旧净值当盘中行情。 ---------- */
+  function pctAbs (h) {
+    if (!h || !h.today_pct_str) return -1;
+    var n = parseFloat(h.today_pct_str);
+    return isNaN(n) ? -1 : Math.abs(n);
+  }
+  function watchRow (h, kind) {
+    var pct = h.today_pct_str;
+    var pctHtml = pct
+      ? '<b class="num ' + upDown(pct) + '">' + esc(pct) + '%</b>'
+      : '<b class="num">—</b>';
+    var date = h.nav_date ? '净值日 ' + esc(h.nav_date) : '暂无净值';
+    return '<div class="home-watch-row">' +
+      '<div class="t"><b>' + esc(h.name || h.fund_code) + '</b>' +
+      '<small>' + esc(h.fund_code || '') + ' · ' + kind + '</small></div>' +
+      '<div class="v">' + pctHtml + '<small>' + date + '</small></div>' +
+      '</div>';
+  }
+  function renderHomeWatch () {
+    var box = document.getElementById('homeWatch');
+    if (!box) return;
+    var rows = [];
+    if (state.watch && state.watch.length) {
+      rows = state.watch.slice(0, 3).map(function (h) { return watchRow(h, '关注'); });
+    } else {
+      var hs = (state.holdings || []).filter(function (h) {
+        return h.today_pct_str !== null && h.today_pct_str !== undefined;
+      }).sort(function (a, b) { return pctAbs(b) - pctAbs(a); }).slice(0, 3);
+      rows = hs.map(function (h) { return watchRow(h, '持有'); });
+    }
+    if (!rows.length) {
+      box.innerHTML = '<div class="alert-empty"><b>还没有可关注的基金</b>' +
+        '<p>去「我的基金」添加持仓或关注基金；这里只展示真实净值数据。</p></div>';
+      return;
+    }
+    box.innerHTML = rows.join('');
   }
 
   /* ---------- 刷新行情（按钮 / 自动）
@@ -281,16 +389,23 @@
       call('get_market_sessions'),
       call('get_market_quotes', HOME_CODES),
       call('get_holdings'),
-      call('get_today_alerts')
+      call('get_today_alerts'),
+      call('get_news_feed', 7).catch(function () { return null; })
     ]).then(function (rs) {
       state.sessions = rs[0];
       state.quotes = rs[1].items;
-      state.holdingCodes = (rs[2].holdings || []).map(function (h) { return h.fund_code; });
+      var hs = rs[2] || {};
+      state.holdings = hs.holdings || [];
+      state.watch = hs.watch || [];
+      state.holdingCodes = state.holdings.map(function (h) { return h.fund_code; });
       renderSessions();
       renderQuotes();
       renderFoot();
-      renderHero(rs[2].summary || {}, (rs[2].holdings || []).length, rs[2].last_check_at);
+      renderHero(hs.summary || {}, state.holdings.length,
+        hs.refresh_cycle_at || hs.last_check_at);
       renderAlerts(rs[3]);
+      renderHomeNews(rs[4]);
+      renderHomeWatch();
     });
   }
 

@@ -12,17 +12,28 @@
 - 提醒有效期四模式：once 仅下一交易日 / until_trigger 持续到触发 / ongoing 长期有效 / range 指定范围；
   triggered_at 仅属 until_trigger（其余模式由 CHECK 锁死为 NULL），ongoing 同日不重复完全由
   alert_events 的 UNIQUE(alert_id, trigger_date) 承担
-- 触发三态原则："条件触发"≠"提醒成功"——alert_events.notify_state 是旧兼容字段（sent/skipped）；
-  1B 起新增 notify_result（pending/submitted/failed/skipped）+ notify_error，新逻辑只看新字段；
-  until_trigger 在触发事件成功写入后立即失效（不再等待通知送达/用户确认），acked 仍单独记录用户确认
+- 触发三态原则："条件触发"≠"提醒成功"——alert_events.notify_state 区分 sent/skipped，
+  acked 记录用户在软件内确认；until_trigger 仅当送达或确认后才视为完成
 - 业务表带 uuid（云同步全局键预留）+ deleted 软删标记（仅 holdings/alerts）
 """
 import os
 import sqlite3
+import sys
 
 from . import news_rules
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+
+def base_dir():
+    """源码运行 = 项目根目录；PyInstaller 目录版 = exe 所在目录。
+
+    便携版把用户数据放在 exe 旁的 data/，不写 _internal，也不碰开发目录。
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+DATA_DIR = os.path.join(base_dir(), "data")
 DB_PATH = os.path.join(DATA_DIR, "xltc.db")
 
 SCHEMA_SQL = """
@@ -179,7 +190,7 @@ CREATE TABLE IF NOT EXISTS alerts (
                    -- 有效期四模式：仅下一交易日/持续到触发/长期有效/指定日期范围
     start_date   TEXT,                       -- 生效开始日；NULL=立即（仅 until_trigger/ongoing）
     end_date     TEXT,                       -- 生效结束日；NULL=无截止（仅 until_trigger/ongoing）
-    triggered_at TEXT,                       -- 仅 until_trigger 使用：首次触发事件成功写入后即失效；
+    triggered_at TEXT,                       -- 仅 until_trigger 使用：首次触发「送达或确认」后写入即失效；
                    -- 其余模式恒 NULL（CHECK 强制），ongoing 的"今日已触发"绝不落此字段
     note         TEXT,                       -- 用户备注（仅自己可见，软件不解读）
     enabled      INTEGER NOT NULL DEFAULT 1, -- 1=启用 0=暂停
@@ -280,6 +291,9 @@ CREATE TABLE IF NOT EXISTS news_items (
                     CHECK (news_kind IN ('realtime','report')), -- 实时7天/财报14天
     title           TEXT NOT NULL,
     summary         TEXT,
+    title_zh        TEXT,                        -- 英文标题的中文译文（可空）
+    summary_zh      TEXT,                        -- 英文摘要的中文译文（可空）
+    translated_at   TEXT,                        -- 最近一次翻译成功时间
     url             TEXT,
     published_at    TEXT,                        -- 本地时间 'YYYY-MM-DD HH:MM:SS'
     published_ts    INTEGER,                     -- epoch 秒（排序/过滤）
@@ -308,6 +322,27 @@ CREATE TABLE IF NOT EXISTS news_item_funds (
     FOREIGN KEY (fund_code) REFERENCES fund_meta(code) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS ix_news_funds_fund ON news_item_funds(fund_code);
+
+-- 15. 新闻用户状态（已读/收藏/忽略；用户数据，云同步预留）
+CREATE TABLE IF NOT EXISTS news_user_state (
+    news_id     INTEGER NOT NULL PRIMARY KEY,
+    is_read     INTEGER NOT NULL DEFAULT 0 CHECK (is_read IN (0,1)),
+    is_favorite INTEGER NOT NULL DEFAULT 0 CHECK (is_favorite IN (0,1)),
+    is_ignored  INTEGER NOT NULL DEFAULT 0 CHECK (is_ignored IN (0,1)),
+    updated_at  TEXT NOT NULL,
+    FOREIGN KEY (news_id) REFERENCES news_items(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_news_user_state_flags
+    ON news_user_state(is_read, is_favorite, is_ignored);
+
+-- 16. 翻译缓存（同一条英文原文只请求一次；内容可重建）
+CREATE TABLE IF NOT EXISTS translation_cache (
+    text_hash       TEXT NOT NULL PRIMARY KEY,
+    source_text     TEXT NOT NULL,
+    translated_text TEXT NOT NULL,
+    target          TEXT NOT NULL DEFAULT 'zh-CN',
+    created_at      TEXT NOT NULL
+);
 """
 
 # 预置：行情花名册种子（代码格式以数据源适配层约定为准，此处为唯一标识）
@@ -321,6 +356,13 @@ MARKET_SEEDS = [
     ("usSPX",    "标普500",    "index", "us", 7),
     ("usNDX",    "纳斯达克100", "index", "us", 8),
     ("usDJI",    "道琼斯",      "index", "us", 9),
+    # 赛道/黄金：用真实 ETF 作为代理（避免展示不存在的“赛道指数”）。
+    # 名称保留了“ETF”，页面会注明“赛道用对应 ETF 代理，不是指数本身”。
+    ("sh512480", "半导体ETF",   "sector", "cn", 21),
+    ("sh515790", "光伏ETF",     "sector", "cn", 22),
+    ("sh512660", "军工ETF",     "sector", "cn", 23),
+    ("sh512800", "银行ETF",     "sector", "cn", 24),
+    ("sh518880", "黄金ETF",     "commodity", "cn", 25),
 ]
 
 
@@ -396,6 +438,20 @@ def _ensure_alert_events_v6(conn):
     )
 
 
+def _ensure_news_translation_v8(conn):
+    """v7→v8：新闻表增加中文译文字段（只加列，不改原文、不重建表）。"""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(news_items)")}
+    for col in ("title_zh", "summary_zh", "translated_at"):
+        if col not in cols:
+            conn.execute("ALTER TABLE news_items ADD COLUMN %s TEXT" % col)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS translation_cache ("
+        " text_hash TEXT NOT NULL PRIMARY KEY, source_text TEXT NOT NULL,"
+        " translated_text TEXT NOT NULL, target TEXT NOT NULL DEFAULT 'zh-CN',"
+        " created_at TEXT NOT NULL)"
+    )
+
+
 def init_db():
     """建库建表 + 种子数据（幂等，可重复调用）"""
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -423,11 +479,26 @@ def init_db():
                 (now,),
             )
         if ver < 6:
-            # v5 → v6：提醒通知结果字段 + 首页 triggered_at 索引；不重建表、不删事件。
+            # v5 → v6：提醒通知结果字段 + triggered_at 索引；不重建表、不删事件。
             _ensure_alert_events_v6(conn)
             conn.execute(
                 "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '6', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = '6', updated_at = excluded.updated_at",
+                (now,),
+            )
+        if ver < 7:
+            # v6 → v7：新闻已读/收藏/忽略状态；只新增表，不动任何新闻或持仓。
+            conn.execute(
+                "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '7', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = '7', updated_at = excluded.updated_at",
+                (now,),
+            )
+        if ver < 8:
+            # v7 → v8：市场事件中文译文字段 + 翻译缓存；只加列/表，不改原文。
+            _ensure_news_translation_v8(conn)
+            conn.execute(
+                "INSERT INTO app_meta (key, value, updated_at) VALUES ('schema_version', '8', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = '8', updated_at = excluded.updated_at",
                 (now,),
             )
         conn.execute(
@@ -442,9 +513,10 @@ def init_db():
                 "VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)",
                 (code, name, mkt_type, market, order, now, now),
             )
-        # 市场事件数据源种子（阶段一：SEC EDGAR + 美联储 RSS）
+        # 市场事件数据源种子（SEC EDGAR + 美联储 RSS + BLS RSS）
         for key, name, kind in (("sec_edgar", "SEC EDGAR（美国证监会）", "official"),
-                                ("fed_rss", "美联储新闻稿 RSS", "official")):
+                                ("fed_rss", "美联储新闻稿 RSS", "official"),
+                                ("bls_rss", "美国劳工统计局 RSS", "official")):
             conn.execute(
                 "INSERT OR IGNORE INTO news_sources "
                 "(source_key, name, kind, enabled, created_at, updated_at) "

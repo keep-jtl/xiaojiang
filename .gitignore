@@ -30,6 +30,8 @@ env/
 data/user_data/
 # 数据库备份目录：整目录忽略（含 .db / .zip / 任何将来新增的备份格式）
 data/backup/
+# 运行时数据缓存与验证基线（本地联网生成，不进仓库）
+data/*.json
 
 # ---------- 日志 ----------
 *.log
@@ -51,8 +53,29 @@ dist/
 Thumbs.db
 desktop.ini
 
-# ---------- 节点依赖（如将来原型用到构建工具） ----------
+# ---------- 节点依赖与 Web 构建产物 ----------
 node_modules/
+www/
+
+# ---------- Android 构建 / 签名（密钥绝不进 Git） ----------
+*.jks
+*.keystore
+keystore.properties
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+*.apk
+*.aab
+
+# ---------- Release 资产（在仓库外/Release 附件，不作为源码提交） ----------
+release/
 
 # ---------- Claude Code 本地会话文件 ----------
 .claude/
+
+# ---------- docs 开发过程稿（mock 与设计稿大图不进仓库；正式 .md 文档保留） ----------
+docs/banner_bg.jpg
+docs/bk_mock_*
+docs/bk_v3_*.png

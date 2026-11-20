@@ -17,7 +17,8 @@ import uuid
 
 from . import db as dbm
 from . import news_rules
-from .sources import news_fed, news_sec
+from . import translator
+from .sources import news_bls, news_fed, news_sec
 
 # ---------------------------------------------------------------------------
 # 阶段一：指数成分股人工清单（有来源说明，后续阶段改为自动拉取）
@@ -35,6 +36,7 @@ NASDAQ_BIOTECH_TOP = ["AMGN", "GILD", "VRTX", "REGN", "MRNA",
 SOURCE_NAMES = {
     "sec_edgar": "SEC EDGAR（美国证监会）",
     "fed_rss": "美联储新闻稿",
+    "bls_rss": "美国劳工统计局",
 }
 
 # 这个错误是“按设计跳过”，不是网络/HTTP/解析失败。
@@ -161,6 +163,41 @@ def _content_hash(item):
     return hashlib.sha256((_norm_title(item.get("title")) + "|" + day).encode("utf-8")).hexdigest()
 
 
+def _translate_cached(conn, text):
+    """英文→中文；同一条原文优先命中 translation_cache，失败返回空串。"""
+    src = str(text or "").strip()
+    if not src or not translator.looks_english(src):
+        return ""
+    clipped = translator._clip(src)
+    h = hashlib.sha256(clipped.encode("utf-8")).hexdigest()
+    hit = conn.execute(
+        "SELECT translated_text FROM translation_cache WHERE text_hash = ?", (h,)
+    ).fetchone()
+    if hit:
+        return hit["translated_text"] or ""
+    out = translator.translate_en_zh(clipped)
+    if out:
+        conn.execute(
+            "INSERT INTO translation_cache "
+            "(text_hash, source_text, translated_text, target, created_at) "
+            "VALUES (?, ?, ?, 'zh-CN', ?) ON CONFLICT(text_hash) DO UPDATE SET "
+            "translated_text = excluded.translated_text, created_at = excluded.created_at",
+            (h, clipped, out, dbm.now_str()),
+        )
+    return out
+
+
+def _translated_fields(conn, item):
+    """返回 (title_zh, summary_zh)；英文才译，中文原文保持空译文。"""
+    title = item.get("title") or ""
+    summary = item.get("summary") or ""
+    title_zh = _translate_cached(conn, title)
+    summary_zh = ""
+    if summary and summary.strip() != title.strip():
+        summary_zh = _translate_cached(conn, summary)
+    return title_zh or None, summary_zh or None
+
+
 def _insert_item(conn, item):
     """插入一条新闻；同源同 ID 或同指纹已存在时返回 None"""
     same = conn.execute(
@@ -168,6 +205,14 @@ def _insert_item(conn, item):
         (item["source"], item["source_id"]),
     ).fetchone()
     if same:
+        # 老新闻也补译文：刷新时只翻译缺译文的那条，已有译文不重复请求。
+        title_zh, summary_zh = _translated_fields(conn, item)
+        if title_zh or summary_zh:
+            conn.execute(
+                "UPDATE news_items SET title_zh = COALESCE(title_zh, ?), "
+                "summary_zh = COALESCE(summary_zh, ?), translated_at = ? WHERE id = ?",
+                (title_zh, summary_zh, dbm.now_str(), same["id"]),
+            )
         return None
 
     h = _content_hash(item)
@@ -175,6 +220,13 @@ def _insert_item(conn, item):
         "SELECT id FROM news_items WHERE content_hash = ? LIMIT 1", (h,)
     ).fetchone()
     if dup:
+        title_zh, summary_zh = _translated_fields(conn, item)
+        if title_zh or summary_zh:
+            conn.execute(
+                "UPDATE news_items SET title_zh = COALESCE(title_zh, ?), "
+                "summary_zh = COALESCE(summary_zh, ?), translated_at = ? WHERE id = ?",
+                (title_zh, summary_zh, dbm.now_str(), dup["id"]),
+            )
         conn.execute(
             "UPDATE news_items SET duplicate_count = duplicate_count + 1 WHERE id = ?",
             (dup["id"],),
@@ -183,15 +235,18 @@ def _insert_item(conn, item):
 
     now = dbm.now_str()
     kind = item.get("news_kind") or news_rules.kind_for_item(item)
+    title_zh, summary_zh = _translated_fields(conn, item)
+    translated_at = now if (title_zh or summary_zh) else None
     cur = conn.execute(
         "INSERT INTO news_items "
-        "(uuid, source, source_id, news_kind, title, summary, url, published_at, published_ts, "
+        "(uuid, source, source_id, news_kind, title, summary, title_zh, summary_zh, "
+        " translated_at, url, published_at, published_ts, "
         " fetched_at, content_hash, duplicate_count, importance, raw_json, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
         (str(uuid.uuid4()), item["source"], item["source_id"], kind, item["title"],
-         item.get("summary"), item.get("url"), item.get("published_at"),
-         item.get("published_ts"), now, h, item.get("importance", 0),
-         item.get("raw_json"), now),
+         item.get("summary"), title_zh, summary_zh, translated_at, item.get("url"),
+         item.get("published_at"), item.get("published_ts"), now, h,
+         item.get("importance", 0), item.get("raw_json"), now),
     )
     return cur.lastrowid
 
@@ -235,16 +290,32 @@ def _match(item, profiles):
             evidence = {"via": "macro", "category": cat, "source": "美联储"}
             out.append((p["fund_code"], relation,
                         round(score * float(item.get("importance") or 0), 4), evidence))
+
+    elif source == "bls_rss":
+        for p in profiles:
+            score = 0.0
+            if p["market"] == "us":
+                score = 0.5  # CPI/就业等美国经济数据 → 美股/QDII 基金
+            elif p["asset_class"] == "bond":
+                score = 0.2  # 美国利率预期对国内债基是弱关联
+            if score <= 0:
+                continue
+            evidence = {"via": "macro", "category": "economic_data",
+                        "source": "美国劳工统计局"}
+            out.append((p["fund_code"], "indirect",
+                        round(score * float(item.get("importance") or 0), 4), evidence))
     return out
 
 
 def _store_items(conn, items, profiles):
     new_count = matched_count = 0
+    new_ids = []
     for item in items:
         nid = _insert_item(conn, item)
         if nid is None:
             continue
         new_count += 1
+        new_ids.append(nid)
         matches = _match(item, profiles)
         if not matches:
             continue
@@ -257,7 +328,7 @@ def _store_items(conn, items, profiles):
                 (nid, fund_code, relation, score,
                  json.dumps(evidence, ensure_ascii=False), dbm.now_str()),
             )
-    return new_count, matched_count
+    return new_count, matched_count, new_ids
 
 
 def _mark_attempt(conn, source_key):
@@ -320,6 +391,7 @@ def refresh_all(conn, notify=None):
     conn.commit()  # 画像先落盘，绝不把写锁带进后面的网络请求
     errors = []
     new_total = matched_total = 0
+    new_ids = []
 
     # 1) SEC：只查当前美股基金画像里的成分股
     tickers = sorted({
@@ -334,9 +406,10 @@ def refresh_all(conn, notify=None):
         except Exception as e:
             items, errs = [], [f"SEC 抓取异常：{e}"]
         errors.extend(errs)
-        n, m = _store_items(conn, items, profiles)
+        n, m, ids = _store_items(conn, items, profiles)
         new_total += n
         matched_total += m
+        new_ids.extend(ids)
         _mark_result(conn, "sec_edgar", errs)
         conn.commit()
 
@@ -348,13 +421,29 @@ def refresh_all(conn, notify=None):
     except Exception as e:
         items, errs = [], [f"美联储抓取异常：{e}"]
     errors.extend(errs)
-    n, m = _store_items(conn, items, profiles)
+    n, m, ids = _store_items(conn, items, profiles)
     new_total += n
     matched_total += m
+    new_ids.extend(ids)
     _mark_result(conn, "fed_rss", errs)
     conn.commit()
 
-    # 3) 抓取结束后再清理一次，处理本轮刚跨过 7/14 天边界的新闻。
+    # 3) BLS（美国劳工统计局）官方 RSS
+    _mark_attempt(conn, "bls_rss")
+    conn.commit()
+    try:
+        items, errs = news_bls.fetch()
+    except Exception as e:
+        items, errs = [], [f"BLS 抓取异常：{e}"]
+    errors.extend(errs)
+    n, m, ids = _store_items(conn, items, profiles)
+    new_total += n
+    matched_total += m
+    new_ids.extend(ids)
+    _mark_result(conn, "bls_rss", errs)
+    conn.commit()
+
+    # 4) 抓取结束后再清理一次，处理本轮刚跨过 7/14 天边界的新闻。
     cleanup_end = cleanup_expired_news(conn)
     conn.commit()
 
@@ -363,6 +452,7 @@ def refresh_all(conn, notify=None):
                 "new": new_total, "matched": matched_total,
                 "at": dbm.now_str()})
     return {"new": new_total, "matched": matched_total,
+            "new_ids": new_ids,
             "errors": errors, "profiles": len(profiles),
             "cleanup": {"start": cleanup_start, "end": cleanup_end}}
 
@@ -374,12 +464,13 @@ def _parse_evidence(s):
         return {}
 
 
-def get_feed(conn, days=14, now_ts=None):
+def get_feed(conn, days=14, now_ts=None, refresh_at=None):
     """给界面读取的新闻列表 + 真实统计 + 逐源/整体状态。
 
     sources[].status: ok 成功 / skipped 按设计跳过 / error 实际失败 / waiting 未执行；
     overall_status: ok / partial / failed / waiting；
     last_attempt_at / last_success_at / latest_item_at 三类时间严格分开。
+    refresh_at: 与净值刷新共用的“最近刷新周期”，由 API 从应用元数据传入。
     显示窗口按类型分开：realtime 7 天、report 14 天。
     """
     now_ts = int(time.time()) if now_ts is None else int(now_ts)
@@ -411,6 +502,19 @@ def get_feed(conn, days=14, now_ts=None):
             "relation": m["relation_type"], "score": m["score"],
             "evidence": _parse_evidence(m["evidence"]),
         } for m in ms]
+        state = conn.execute(
+            "SELECT is_read, is_favorite, is_ignored, updated_at "
+            "FROM news_user_state WHERE news_id = ?",
+            (r["id"],),
+        ).fetchone()
+        user_state = ({
+            "is_read": int(state["is_read"] or 0),
+            "is_favorite": int(state["is_favorite"] or 0),
+            "is_ignored": int(state["is_ignored"] or 0),
+            "updated_at": state["updated_at"],
+        } if state else {
+            "is_read": 0, "is_favorite": 0, "is_ignored": 0, "updated_at": None,
+        })
         score = max([f["score"] for f in funds], default=0.0)
         relation = "direct" if any(f["relation"] == "direct" for f in funds) else (
             "indirect" if funds else "none")
@@ -432,7 +536,10 @@ def get_feed(conn, days=14, now_ts=None):
             "source_name": SOURCE_NAMES.get(r["source"], r["source"]),
             "news_kind": kind,
             "title": r["title"],
+            "title_zh": r["title_zh"] or "",
             "summary": r["summary"] or "",
+            "summary_zh": r["summary_zh"] or "",
+            "translated_at": r["translated_at"],
             "url": r["url"] or "",
             "published_at": r["published_at"],
             "published_ts": r["published_ts"],
@@ -442,6 +549,10 @@ def get_feed(conn, days=14, now_ts=None):
             "score": round(score, 4),
             "relation": relation,
             "funds": funds,
+            "user_state": user_state,
+            "is_read": user_state["is_read"],
+            "is_favorite": user_state["is_favorite"],
+            "is_ignored": user_state["is_ignored"],
         })
 
     today_items = [i for i in items if (i["published_at"] or "").startswith(today)]
@@ -510,11 +621,15 @@ def get_feed(conn, days=14, now_ts=None):
             "report_total_14d": len(report_items),
             "report_related_14d": len(report_related),
             "report_important_14d": len(report_important),
+            "unread": len([i for i in items if not i["is_read"]]),
+            "favorites": len([i for i in items if i["is_favorite"]]),
+            "ignored": len([i for i in items if i["is_ignored"]]),
         },
         "sources": sources,
         "last_success_at": last_success,
         "last_attempt_at": last_attempt,
         "latest_item_at": latest_item_at,
+        "refresh_cycle_at": refresh_at or last_success,
         "overall_status": overall_status,
         "partial": overall_status == "partial",
         "stale": stale,

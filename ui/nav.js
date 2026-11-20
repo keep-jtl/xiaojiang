@@ -2,11 +2,10 @@
    小财通 · 顶部导航统一管理（所有原型页面共用）
    2026-08-31 按已确认的最终导航结构重写：
    - 顶部固定 5 个核心入口：首页 / 我的基金 / 市场事件 / 盯盘提醒 / 组合体检
-   - 其余功能收进「更多」下拉，内部分组：
-       研究工具：发现 / 赛道 / 基金经理 / 全球市场（默认不推送、主动进入）
-       其他：设置
+   - 其余功能收进「更多」下拉：研究工具（发现/赛道/基金经理/全球市场）与设置
+   - 研究工具真实数据来自公开源与本机 SQLite；不再使用 coming-soon 占位页
    - 投资记忆暂不占顶部，入口在「我的基金 → 持仓详情/历史持仓」
-   - 窄窗口（≤860px）：核心只保留 首页/我的基金/盯盘提醒，其余进「更多」
+   - 窄窗口（≤860px）：核心只保留 首页/我的基金，其余进「更多」
    - 当前页高亮按文件名自动判断，无需手工维护
    新增页面时：只改下方 CORE / MORE 里对应的 href，所有页面自动同步。
    ========================================================== */
@@ -19,18 +18,24 @@
     { href: 'analysis.html', label: '组合体检' }
   ];
   var MORE = [
-    { href: '#', label: '设置', group: '其他' },
-    { href: '#', label: '发现', group: '研究工具' },
-    { href: '#', label: '赛道', group: '研究工具' },
-    { href: '#', label: '基金经理', group: '研究工具' },
-    { href: '#', label: '全球市场', group: '研究工具' }
+    { href: 'research.html', label: '研究工具', group: '研究工具' },
+    { href: 'opportunity.html', label: '市场机遇', group: '研究工具' },
+    { href: 'settings.html', label: '设置', group: '其他' }
   ];
   var cur = location.pathname.split('/').pop();
+  var curFeature = new URLSearchParams(location.search).get('feature') || '';
   var nav = document.getElementById('mainNav');
   if (!nav) return;
 
+  function isActive (n) {
+    if (n.href === cur) return true;
+    if (cur === 'coming-soon.html' && n.href.indexOf('coming-soon.html?feature=') === 0) {
+      return n.href.split('feature=')[1] === curFeature;
+    }
+    return false;
+  }
   function a (n) {
-    return '<a href="' + n.href + '"' + (n.href === cur ? ' class="active"' : '') + '>' + n.label + '</a>';
+    return '<a href="' + n.href + '"' + (isActive(n) ? ' class="active"' : '') + '>' + n.label + '</a>';
   }
 
   function render () {
@@ -38,12 +43,12 @@
     var more = MORE.slice();
     var collapsed = [];
     if (window.innerWidth <= 860) {
-      collapsed = core.splice(2); /* 窄窗口只保留 首页/我的基金/盯盘提醒 */
+      collapsed = core.splice(2); /* 窄窗口核心只保留 首页/我的基金，其余进「更多」 */
       more = more.concat(collapsed);
     }
     var html = core.map(a).join('');
     if (more.length) {
-      var curHidden = more.some(function (n) { return n.href === cur; });
+      var curHidden = more.some(isActive);
       html += '<div class="nav-more" id="navMore">' +
         '<a href="#" class="nav-more-btn' + (curHidden ? ' active' : '') + '">更多 ▾</a>' +
         '<div class="nav-dropdown">' + groups(more, collapsed) + '</div>' +

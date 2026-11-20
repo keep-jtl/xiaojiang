@@ -77,11 +77,13 @@ import time
 from . import db as dbm
 from . import market_cal as mcal
 from . import news_service
+from . import system_notify
 from .sources import fund_nav as src
 
 # ---------- 可调参数 ----------
 TICK_SECONDS = 30 * 60                # 运行期间每 30 分钟一个刷新节拍（启动时另有一次立即刷新）
 CHECK_KEY = "nav_last_check_at"       # app_meta 里的"最近一次真正联网检查净值"时刻
+REFRESH_CYCLE_KEY = "last_refresh_at" # 与市场事件共用的“本轮刷新周期”时间
 VERBOSE = True                        # 打印每一轮的检查过程（方便用户看它怎么工作）
 
 # 净值刷新全局锁：akshare 底层 JS 引擎（py_mini_racer/V8）线程不安全，并发调用会崩溃
@@ -99,6 +101,12 @@ _STATE_LOCK = threading.Lock()
 _TICK_LOCK = threading.Lock()
 
 _STARTED = False
+
+# 净值监听器注册表（提醒引擎等）：按注册顺序保存，独立锁保护。
+# 监听器只做轻量入队，重活由各自模块的线程处理；回调异常不影响刷新器和其他监听器。
+_NAV_LISTENERS = []
+_NAV_LISTENERS_LOCK = threading.Lock()
+
 _ACTION_CN = {
     "advanced": "联网 → 净值已更新",
     "no_new": "联网 → 数据源暂无更新的净值（旧净值保留）",
@@ -129,6 +137,79 @@ def holding_codes(conn=None):
         return [r["fund_code"] for r in rows]
     finally:
         if own:
+            conn.close()
+
+
+def nav_refresh_codes(conn=None):
+    """后台净值刷新对象 = 持有中基金 + 启用了盯盘提醒的基金（含仅关注 watch）。
+
+    不能只刷持仓：仅关注基金若启用了提醒，却没有新净值进入，规则会长期无数据可判。
+    已删除/暂停的提醒不纳入。
+    """
+    own = conn is None
+    conn = conn or dbm.connect()
+    try:
+        codes = set()
+        for r in conn.execute(
+            "SELECT DISTINCT fund_code FROM holdings "
+            "WHERE deleted = 0 AND status = 'holding' AND fund_code IS NOT NULL"
+        ).fetchall():
+            codes.add(r["fund_code"])
+        for r in conn.execute(
+            "SELECT DISTINCT fund_code FROM alerts "
+            "WHERE obj_type = 'fund' AND enabled = 1 AND deleted = 0 AND fund_code IS NOT NULL"
+        ).fetchall():
+            codes.add(r["fund_code"])
+        return sorted(codes)
+    finally:
+        if own:
+            conn.close()
+
+
+def add_nav_listener(fn):
+    """注册净值刷新回调；重复注册同一回调只保留一份。"""
+    if not callable(fn):
+        raise TypeError("净值监听器必须是可调用对象")
+    with _NAV_LISTENERS_LOCK:
+        if fn not in _NAV_LISTENERS:
+            _NAV_LISTENERS.append(fn)
+
+
+def remove_nav_listener(fn):
+    """注销净值刷新回调；回调不存在时静默，不报错。"""
+    with _NAV_LISTENERS_LOCK:
+        try:
+            _NAV_LISTENERS.remove(fn)
+        except ValueError:
+            pass
+
+
+def _dispatch_nav_event(event):
+    """把一次完整净值刷新结果派发给所有监听器（在刷新结束后调用）。
+
+    先快照监听器列表，再逐个回调；单个回调抛错只记录，不影响其他监听器和刷新器。
+    """
+    with _NAV_LISTENERS_LOCK:
+        listeners = list(_NAV_LISTENERS)
+    for fn in listeners:
+        try:
+            fn(event)
+        except Exception as e:
+            print(f"[refresher] 净值监听器回调异常（不影响刷新器/其他监听器）: {e}")
+
+
+def mark_refresh_cycle(now=None):
+    """记下本轮统一刷新周期时间（app_meta.last_refresh_at）。
+
+    首页、市场事件页都读这个键，保证同一轮显示同一时间；它与“净值检查成功”
+    是两件事，所以不替代 nav_last_check_at。
+    """
+    with _STATE_LOCK:
+        conn = dbm.connect()
+        try:
+            dbm.set_app_meta(conn, REFRESH_CYCLE_KEY, now or dbm.now_str())
+            conn.commit()
+        finally:
             conn.close()
 
 
@@ -166,7 +247,17 @@ def refresh_nav(codes, notify=None, mode="auto"):
     if not codes:
         return {"started": False, "report": []}
     report = [{"code": c, "action": "pending"} for c in codes]
+    started_at = dbm.now_str()
     _fetch_phase(report, notify, mode)
+    finished_at = dbm.now_str()
+    # 刷新完整结束后再派发：事件含逐只 report（含 before/after）与启动标记，
+    # 监听器据此建基线或入队；派发本身的异常已被隔离，不影响返回值。
+    _dispatch_nav_event({
+        "report": report,
+        "startup": mode == "startup",
+        "started_at": started_at,
+        "finished_at": finished_at,
+    })
     return {"started": True, "report": report}
 
 
@@ -223,7 +314,7 @@ def _fetch_phase(report, notify, mode):
     if notify and netted:
         # 只要真的联网检查过就通知界面重取：这样首页"净值最近检查于"会立刻刷新。
         # 没有新净值时数字不变、时间前进，正是要表达的区分。
-        notify({"type": "dataUpdated", "ok": len(failed) == 0, "mode": mode,
+        notify({"type": "dataUpdated", "ok": bool(netted), "mode": mode,
                 "changed": changed, "failed": failed, "at": dbm.now_str()})
 
 
@@ -260,10 +351,10 @@ def _task_calendar():
 
 
 def _task_nav(notify, mode="auto"):
-    """基金净值：逐只真实联网（不再判断"需不需要"，每一轮都拉）"""
-    codes = holding_codes()
+    """基金净值：逐只真实联网（含启用提醒的仅关注基金，每一轮都拉）"""
+    codes = nav_refresh_codes()
     if not codes:
-        return "没有持仓，跳过（记不了检查时间，这是正常的）"
+        return "没有持仓或启用提醒的基金，跳过（记不了检查时间，这是正常的）"
     report = refresh_nav(codes, notify=notify, mode=mode)["report"]
     ok = [e["code"] for e in report if e["action"] != "failed"]
     fresh = [e["code"] for e in report if e["action"] == "advanced"]
@@ -294,8 +385,37 @@ def _task_news(notify):
     conn = dbm.connect()
     try:
         r = news_service.refresh_all(conn, notify=notify)
+        newly_related = []
+        if r.get("matched"):
+            # 只用于通知文案：取本轮新增且有基金关联的条目（历史条目不会冒充“新增”）。
+            feed = news_service.get_feed(conn, days=14)
+            new_ids = set(r.get("new_ids") or [])
+            newly_related = [x for x in feed.get("items", [])
+                             if x.get("id") in new_ids and x.get("funds")
+                             and not x.get("is_ignored")]
     finally:
         conn.close()
+
+    # 应用内“市场事件通知”开关；默认关闭，只有用户明确开启才推送。
+    # 子开关“我的关注”默认开，显式关闭则不推。
+    try:
+        c = dbm.connect()
+        try:
+            enabled = (dbm.get_setting(c, "notify_news_enabled") == "1")
+            follow = dbm.get_setting(c, "notify_news_follow")
+        finally:
+            c.close()
+        if enabled and follow != "0" and newly_related:
+            top = max(newly_related, key=lambda x: x.get("published_ts") or 0)
+            count = len(newly_related)
+            body = (top.get("title") or "有新的官方市场事件")[:160]
+            if count > 1:
+                body = f"{body}（本轮共 {count} 条与你有关）"
+            # send() 内部会同时拉起自绘桌面横幅；免打扰下横幅仍可见。
+            system_notify.send("小财通 · 市场事件提醒", body)
+    except Exception as exc:
+        print(f"[refresher] 市场事件桌面通知失败（不影响刷新）: {exc}")
+
     msg = f"新增 {r['new']} 条，关联 {r['matched']} 条"
     if r["errors"]:
         msg += f"；{len(r['errors'])} 个源有错误（旧数据保留）"
@@ -313,12 +433,14 @@ def tick(api, notify=None, n=None, log=None):
         return {"skipped": True}
     try:
         first = (n == 1)
+        cycle_at = dbm.now_str()
+        mark_refresh_cycle(cycle_at)
         if log:
             print(f"[refresher] ── {'启动刷新' if first else '定时刷新'} "
                   f"#{n if n is not None else '-'}  {dbm.now_str()} ──")
         out = {}
         for name, fn in (("日历", _task_calendar),
-                         ("净值", lambda: _task_nav(notify)),
+                         ("净值", lambda: _task_nav(notify, "startup" if first else "auto")),
                          ("行情", lambda: _task_quotes(api)),
                          ("市场事件", lambda: _task_news(notify))):
             try:

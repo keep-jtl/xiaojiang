@@ -17,17 +17,24 @@
 """
 import datetime
 import json
+import sys
 import threading
 import uuid
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from . import converters as cv
+from . import alert_engine
+from . import autostart
 from . import db as dbm
+from . import discovery
+from . import fund_manager
 from . import market_cal as mcal
 from . import news_service
+from . import portfolio_analysis
 from . import refresher
-from .refresher import NAV_REFRESH_LOCK, QUOTE_REFRESH_LOCK
+from . import system_notify
+from .refresher import QUOTE_REFRESH_LOCK
 from .sources import fund_list, fund_nav as src
 from .sources import market_quotes as mq
 
@@ -52,6 +59,7 @@ NOTIFY_KEYS = {
     "news_follow": "notify_news_follow",
     "news_discover": "notify_news_discover",
     "news_event": "notify_news_event",
+    "system_asked": "notify_system_asked",
 }
 
 # 盯盘提醒 1A：只做规则真实保存，不做检查引擎/通知/历史。
@@ -477,6 +485,34 @@ class Api:
         finally:
             conn.close()
 
+    def get_alert_history(self, limit=100):
+        """历史触发记录（真实事件；通知提交结果与用户已读是两个独立状态）。"""
+        conn = dbm.connect()
+        try:
+            try:
+                n = int(limit)
+            except (TypeError, ValueError):
+                n = 100
+            n = max(1, min(n, 500))
+            rows = conn.execute(
+                "SELECT e.id, e.alert_id, e.trigger_date, e.triggered_at, e.cond_snapshot,"
+                " e.actual_value, e.trigger_kind, e.notify_state, e.notify_result,"
+                " e.notify_error, e.acked, a.obj_type, a.cond_type, a.direction,"
+                " COALESCE(f.name, m.name, a.fund_code, a.mkt_code) AS obj_name"
+                " FROM alert_events e"
+                " JOIN alerts a ON a.id = e.alert_id"
+                " LEFT JOIN fund_meta f ON f.code = a.fund_code"
+                " LEFT JOIN market_meta m ON m.code = a.mkt_code"
+                " ORDER BY e.triggered_at DESC, e.id DESC LIMIT ?", (n,)).fetchall()
+            items = []
+            for r in rows:
+                d = dict(r)
+                d["acked"] = bool(r["acked"])
+                items.append(d)
+            return {"ok": True, "items": items}
+        finally:
+            conn.close()
+
     # ---------- 盯盘提醒规则（1A：只做真实保存，不做检查/通知/历史） ----------
     def get_alert_page(self):
         """提醒管理页数据：真实规则 + 真实对象清单 + 启用数。
@@ -526,7 +562,7 @@ class Api:
                     "sub": f"{code} · {status_label}",
                 })
 
-            # 真实指数对象：market_meta 出厂预置（当前只有 9 个指数，不伪造赛道/黄金）。
+            # 真实市场对象：9 个指数 + 4 个赛道 ETF + 1 个黄金 ETF（ETF 仅作代理）。
             market_rows = conn.execute(
                 "SELECT code, name, mkt_type, market FROM market_meta"
                 " WHERE enabled = 1 ORDER BY display_order, code"
@@ -745,6 +781,118 @@ class Api:
             "alerts_enabled": 1 if _truthy(enabled) else 0,
         })
 
+    def get_notify_capabilities(self):
+        """真实系统通知能力（Windows Toast 可测试；自动推送仍未接通）。"""
+        return system_notify.capabilities()
+
+    def get_desktop_settings(self):
+        """桌面端后台行为：关闭到托盘、登录自启动、托盘可用状态。"""
+        conn = dbm.connect()
+        try:
+            close_to_tray = dbm.get_setting(conn, "close_to_tray")
+        finally:
+            conn.close()
+        auto = autostart.get_status()
+        return {
+            "close_to_tray": close_to_tray != "0",  # 默认开启
+            "autostart": auto,
+            "tray_available": bool(sys.platform == "win32"),
+            "tray_running": getattr(self, "tray_running", None),
+        }
+
+    def set_close_to_tray(self, enabled):
+        """关闭主窗口时隐藏到托盘（True）或直接退出（False）。"""
+        conn = dbm.connect()
+        try:
+            dbm.set_setting(conn, "close_to_tray", "1" if _truthy(enabled) else "0")
+            conn.commit()
+            return {"ok": True, "close_to_tray": bool(_truthy(enabled))}
+        finally:
+            conn.close()
+
+    def set_autostart(self, enabled):
+        """真实写/删 HKCU Run；失败返回错误，不假装成功。"""
+        return autostart.set_enabled(bool(_truthy(enabled)))
+
+    def get_autostart_status(self):
+        return autostart.get_status()
+
+    def minimize_to_tray(self):
+        """把主窗口隐藏到托盘（由 main.py 注入回调）。"""
+        cb = getattr(self, "hide_window", None)
+        if not callable(cb):
+            return {"ok": False, "error": "当前不是桌面窗口环境，无法最小化到托盘"}
+        try:
+            cb()
+            return {"ok": True}
+        except Exception as exc:
+            return {"ok": False, "error": f"最小化到托盘失败：{exc}"}
+
+    def quit_app(self):
+        """真正退出程序（由 main.py 注入回调）。"""
+        cb = getattr(self, "exit_app", None)
+        if not callable(cb):
+            return {"ok": False, "error": "当前不是桌面窗口环境，无法退出程序"}
+        try:
+            cb()
+            return {"ok": True}
+        except Exception as exc:
+            return {"ok": False, "error": f"退出失败：{exc}"}
+
+    def open_notification_settings(self):
+        """打开 Windows 系统通知设置。"""
+        return system_notify.open_settings()
+
+    def send_test_notification(self, kind="generic"):
+        """发送一条真实 Windows 系统通知，用于验证通道；不是模拟页面内提示。"""
+        texts = {
+            "news": ("小财通 · 市场事件提醒（测试）",
+                     "这是一条真实 Windows 系统通知。新匹配到你持仓的官方事件会自动推送，"
+                     "并在免打扰下弹出桌面横幅。"),
+            "alerts": ("小财通 · 盯盘提醒（测试）",
+                       "这是一条真实 Windows 系统通知。提醒规则由后台引擎每 60 秒检查，"
+                       "触发后自动推送并弹出桌面横幅。"),
+            "generic": ("小财通 · 测试通知",
+                        "如果你看到这条通知，说明 Windows 系统通知通道已接通。"
+                        "市场事件与盯盘提醒均可自动推送。"),
+        }
+        title, body = texts.get(kind, texts["generic"])
+        return system_notify.send(title, body)
+
+    def ask_notify_system(self, enabled):
+        """首次系统通知引导的落点：记下已询问；选开启时同时打开两类通知偏好。
+
+        注意：这里只保存偏好并记录“已询问”，真正发送由界面随后调用
+        send_test_notification；发送失败不影响“已询问”标记，用户可在设置页重试。
+        """
+        conn = dbm.connect()
+        try:
+            on = _truthy(enabled)
+            dbm.set_setting(conn, NOTIFY_KEYS["system_asked"], "1")
+            if on:
+                dbm.set_setting(conn, NOTIFY_KEYS["news_enabled"], "1")
+                dbm.set_setting(conn, NOTIFY_KEYS["alerts_enabled"], "1")
+            conn.commit()
+            return {short: dbm.get_setting(conn, key) for short, key in NOTIFY_KEYS.items()}
+        finally:
+            conn.close()
+
+    def get_engine_status(self):
+        """盯盘监测真实运行状态（供提醒页状态驱动，不写死“运行中”）。"""
+        st = alert_engine.status()
+        conn = dbm.connect()
+        try:
+            enabled = dbm.get_setting(conn, NOTIFY_KEYS["alerts_enabled"])
+        finally:
+            conn.close()
+        cap = system_notify.capabilities()
+        st["notifications_enabled"] = bool(enabled) and _truthy(enabled)
+        st["notifier_available"] = bool(cap and cap.get("available"))
+        # 应用内偏好 ≠ Windows 系统通知总开关。把真实系统开关一并返回，
+        # 页面才能显示「应用内提醒：开 / 系统通知：关」，不再把偏好误写成“桌面通知已开启”。
+        st["toast_enabled"] = cap.get("toast_enabled") if cap else None
+        return st
+
     # ---------- 市场事件（阶段一：SEC + 美联储） ----------
     def get_news_feed(self, days=14):
         """真实市场事件列表 + 真实统计 + 数据源状态。
@@ -752,12 +900,129 @@ class Api:
         只返回数据库里已有的事件；页面据 summary 显示真实条数。
         窗口按类型过滤：实时 7 天、财报 14 天。
         没有相关事件时 funds 为空，绝不编造或凑数。
+        刷新周期与净值刷新共用 app_meta.last_refresh_at，页面不再各显示各的时间。
         """
         conn = dbm.connect()
         try:
-            return news_service.get_feed(conn, days)
+            refresh_at = dbm.get_app_meta(conn, "last_refresh_at")
+            return news_service.get_feed(conn, days, refresh_at=refresh_at)
         finally:
             conn.close()
+
+    def set_news_state(self, news_id, patch=None, is_read=None, is_favorite=None, is_ignored=None):
+        """持久化一条新闻的用户状态（只写传入字段，其余不动）。
+
+        兼容两种调用：set_news_state(id, {"is_favorite": true})（网页常用）
+        或 set_news_state(id, True, False, None)（位置参数）。
+        """
+        try:
+            nid = int(news_id)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "新闻编号不正确"}
+        if isinstance(patch, dict):
+            is_read = patch.get("is_read", is_read)
+            is_favorite = patch.get("is_favorite", is_favorite)
+            is_ignored = patch.get("is_ignored", is_ignored)
+        elif patch is not None:
+            is_read = patch
+        conn = dbm.connect()
+        try:
+            exists = conn.execute("SELECT id FROM news_items WHERE id = ?", (nid,)).fetchone()
+            if not exists:
+                return {"ok": False, "error": "这条新闻已过期或被清理"}
+            cur = conn.execute(
+                "SELECT is_read, is_favorite, is_ignored FROM news_user_state WHERE news_id = ?",
+                (nid,),
+            ).fetchone()
+            old = dict(cur) if cur else {"is_read": 0, "is_favorite": 0, "is_ignored": 0}
+            for key, value in (("is_read", is_read), ("is_favorite", is_favorite),
+                               ("is_ignored", is_ignored)):
+                if value is not None:
+                    old[key] = 1 if _truthy(value) else 0
+            conn.execute(
+                "INSERT INTO news_user_state (news_id, is_read, is_favorite, is_ignored, updated_at) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(news_id) DO UPDATE SET "
+                " is_read=excluded.is_read, is_favorite=excluded.is_favorite, "
+                " is_ignored=excluded.is_ignored, updated_at=excluded.updated_at",
+                (nid, old["is_read"], old["is_favorite"], old["is_ignored"], dbm.now_str()),
+            )
+            conn.commit()
+            return {"ok": True, "news_id": nid, **old}
+        except Exception as exc:
+            return {"ok": False, "error": "保存新闻状态失败：%s" % exc}
+        finally:
+            conn.close()
+
+    def get_research_overview(self):
+        """研究工具的真实数据：市场花名册/行情 + 现任基金经理。
+
+        不返回任何示例公司、示例经理或编造的“赛道”；没有数据时返回空数组，
+        由页面显示“尚未获取/暂无”。
+        """
+        conn = dbm.connect()
+        try:
+            market_rows = conn.execute(
+                "SELECT m.code, m.name, m.mkt_type, m.market, m.display_order,"
+                " q.price_scaled, q.change_pct_scaled, q.quote_time, q.source, q.fetched_at "
+                "FROM market_meta m LEFT JOIN market_quotes q ON q.mkt_code = m.code "
+                "WHERE m.enabled = 1 ORDER BY m.mkt_type, m.display_order, m.code"
+            ).fetchall()
+            markets = []
+            for r in market_rows:
+                d = dict(r)
+                d["type_label"] = MARKET_TYPE_LABELS.get(d["mkt_type"], d["mkt_type"])
+                markets.append(d)
+            codes = [r["fund_code"] for r in conn.execute(
+                "SELECT DISTINCT fund_code FROM holdings "
+                "WHERE deleted = 0 AND status = 'holding' ORDER BY fund_code"
+            ).fetchall()]
+            managers = fund_manager.get_managers(codes)
+            out = []
+            for code in codes:
+                meta = conn.execute(
+                    "SELECT name, fund_type, manager FROM fund_meta WHERE code = ?", (code,)
+                ).fetchone()
+                item = managers.get(code) or {"ok": False, "error": "尚未读取"}
+                name = meta["name"] if meta else code
+                manager_name = (meta["manager"] if meta else "") or ""
+                if item.get("ok") and item.get("managers"):
+                    manager_name = "、".join([m["name"] for m in item["managers"]])
+                    # 只缓存姓名；详细任期/规模按需实时显示，避免把旧详情冒充最新。
+                    conn.execute(
+                        "UPDATE fund_meta SET manager = ?, updated_at = ? WHERE code = ?",
+                        (manager_name, dbm.now_str(), code),
+                    )
+                    conn.commit()
+                out.append({
+                    "code": code,
+                    "fund_name": name,
+                    "fund_type": (meta["fund_type"] if meta else "") or "",
+                    "manager": manager_name,
+                    "ok": bool(item.get("ok")),
+                    "managers": item.get("managers") or [],
+                    "error": item.get("error"),
+                })
+            return {"markets": markets, "managers": out, "at": dbm.now_str()}
+        finally:
+            conn.close()
+
+    # ---------- 市场机遇（细分赛道，对应手机端） ----------
+    def get_opportunity_overview(self):
+        """14 个细分赛道 + 东方财富板块行情。行情失败时赛道仍展示，error 标注原因。"""
+        return discovery.build_overview()
+
+    def get_opportunity_detail(self, theme_id):
+        """单个赛道详情：赛道逻辑/观察信号/相关基金（非推荐）/近期公开事件/风险。"""
+        news_items = []
+        conn = dbm.connect()
+        try:
+            feed = news_service.get_feed(conn, 14)
+            news_items = feed.get("items", [])
+        except Exception:
+            news_items = []
+        finally:
+            conn.close()
+        return discovery.build_detail(theme_id, news_items=news_items)
 
     # ---------- 我的基金页 ----------
     def get_holdings(self):
@@ -791,10 +1056,11 @@ class Api:
                 h = dict(r)
                 code = h["fund_code"]
                 if code not in names:
-                    m = conn.execute("SELECT name, fund_type FROM fund_meta WHERE code = ?", (code,)).fetchone()
-                    names[code] = dict(m) if m else {"name": code, "fund_type": ""}
+                    m = conn.execute("SELECT name, fund_type, manager FROM fund_meta WHERE code = ?", (code,)).fetchone()
+                    names[code] = dict(m) if m else {"name": code, "fund_type": "", "manager": None}
                 h["name"] = names[code]["name"]
                 h["fund_type"] = names[code]["fund_type"] or ""
+                h["manager"] = names[code].get("manager") or ""
                 h.pop("deleted", None)
                 st = h["status"]
                 if st == "holding":
@@ -804,6 +1070,19 @@ class Api:
                     for k in ("cost_cents", "shares_scaled", "sell_cents", "profit_cents",
                               "closed_at", "clear_reason", "clear_judge", "clear_good", "clear_review"):
                         h.pop(k, None)
+                    # 关注基金也附本地最新净值（只读缓存，不联网、不改 schema）；
+                    # 首页/我的基金显示“净值日 + 最新披露日涨跌幅”，不冒充盘中行情。
+                    nav = src.latest_nav(conn, code)
+                    if nav is None:
+                        h["nav_date"] = h["nav_str"] = h["fetched_at"] = h["source"] = None
+                        h["today_pct_str"] = None
+                    else:
+                        h["nav_date"] = nav["nav_date"]
+                        h["nav_str"] = _nav_str(nav["unit_nav_scaled"])
+                        h["fetched_at"] = nav["fetched_at"]
+                        h["source"] = SOURCE_LABELS.get(nav["source"], nav["source"])
+                        pct = nav.get("daily_pct_scaled")
+                        h["today_pct_str"] = _pct2_str(pct) if pct is not None else None
                     result["watch"].append(h)
                 else:  # closed 历史持仓
                     self._attach_history(h)
@@ -814,7 +1093,44 @@ class Api:
             # 它同样只在联网成功后才写，语义一致，不是伪造时间，避免首页一开始空着。
             result["last_check_at"] = (dbm.get_app_meta(conn, refresher.CHECK_KEY)
                                        or result["last_fetch_at"])
+            # 与市场事件共用同一刷新周期；首页用它显示，避免两个页面时间对不上。
+            result["refresh_cycle_at"] = (dbm.get_app_meta(conn, "last_refresh_at")
+                                          or result["last_check_at"])
             return result
+        finally:
+            conn.close()
+
+    def get_portfolio_report(self):
+        """组合体检：只读 holding 持仓 + 真实净值，调纯计算模块返回结构化报告。
+
+        不联网、不写库、无副作用；仅统计 status='holding' 且未删除的持仓，
+        watch/closed 不混入当前市值。空持仓由纯计算模块返回 empty 说明。
+        """
+        conn = dbm.connect()
+        try:
+            holds = conn.execute(
+                "SELECT h.fund_code, h.shares_scaled, h.cost_cents,"
+                " f.name, f.fund_type "
+                "FROM holdings h JOIN fund_meta f ON f.code = h.fund_code "
+                "WHERE h.status='holding' AND h.deleted=0"
+            ).fetchall()
+            positions = []
+            for r in holds:
+                nav_rows = conn.execute(
+                    "SELECT nav_date AS date, unit_nav_scaled AS nav,"
+                    " daily_pct_scaled AS pct FROM fund_nav_daily "
+                    "WHERE fund_code=? ORDER BY nav_date ASC",
+                    (r["fund_code"],),
+                ).fetchall()
+                positions.append({
+                    "code": r["fund_code"],
+                    "name": r["name"],
+                    "fund_type": r["fund_type"] or "",
+                    "shares_scaled": r["shares_scaled"],
+                    "cost_cents": r["cost_cents"],
+                    "nav_rows": [dict(x) for x in nav_rows],
+                })
+            return portfolio_analysis.build_report(positions)
         finally:
             conn.close()
 
@@ -825,6 +1141,7 @@ class Api:
         shares_s = h.pop("shares_scaled", None)
         h["cost_cents"] = cost_c
         h["shares_str"] = _shares_str(shares_s)
+        h["cost_price_str"] = _cost_price_str(cost_c, shares_s)
         nav = src.latest_nav(conn, code)
         if nav is None:
             h["nav_date"] = h["nav_str"] = h["fetched_at"] = h["source"] = None
@@ -832,7 +1149,7 @@ class Api:
             h["today_profit_cents"] = h["today_pct_str"] = h["profit_pct_str"] = None
             return h
         h["nav_date"] = nav["nav_date"]
-        h["nav_str"] = str(cv.nav_from_scaled(nav["unit_nav_scaled"]))
+        h["nav_str"] = _nav_str(nav["unit_nav_scaled"])
         h["fetched_at"] = nav["fetched_at"]
         h["source"] = SOURCE_LABELS.get(nav["source"], nav["source"])
         h["market_value_cents"] = src.market_value_cents(shares_s, nav["unit_nav_scaled"])
@@ -849,7 +1166,7 @@ class Api:
                 shares_s, nav["unit_nav_scaled"], prev["unit_nav_scaled"])
         else:
             h["today_profit_cents"] = None
-        h["profit_pct_str"] = _pct1_str(h["profit_cents"], cost_c)
+        h["profit_pct_str"] = _pct_ratio_str(h["profit_cents"], cost_c)
         return h
 
     @staticmethod
@@ -858,7 +1175,7 @@ class Api:
         h["cost_cents"] = h.pop("cost_cents", None)
         h["sell_cents"] = h.pop("sell_cents", None)
         h["profit_cents"] = h.pop("profit_cents", None)
-        h["profit_pct_str"] = _pct1_str(h["profit_cents"], h["cost_cents"])
+        h["profit_pct_str"] = _pct_ratio_str(h["profit_cents"], h["cost_cents"])
         h.pop("shares_scaled", None)
         return h
 
@@ -866,46 +1183,137 @@ class Api:
     def _summary(conn, holdings):
         """资产总览汇总（整数分求和 + Decimal 算百分比，全在 Python 侧）。
 
-        语义：任何持仓都还没有净值时，total/profit/today 一律 None（界面显示 —，
-        避免把"还没算出来"显示成 0 元误导）；成本 cost_cents 恒有值。
+        口径（对齐 GPT《收口及双端交付决定》）：
+        - 所有持仓都有有效净值（complete）：给完整组合总市值/累计盈亏/收益率/今日盈亏；
+        - 部分持仓缺净值：完整口径字段为 None（界面显示 —），另给「已估值部分」
+          小计与完整度，绝不把已知部分合计冒充组合总资产；
+        - 全部无净值：total/profit 一律 None（界面显示 —，不把"还没算出来"显示成 0）；
+        - 成本 cost_cents 恒有值（含全部持仓成本）。
         """
         s = {"count": len(holdings), "cost_cents": 0,
-             "total_cents": None, "profit_cents": None, "today_profit_cents": None,
-             "profit_pct_str": None, "today_pct_str": None}
-        mv_any = False
-        total = cost = profit = 0
-        today = 0
-        today_n = 0
+             "complete": False,
+             "total_cents": None, "profit_cents": None,
+             "today_profit_cents": None,
+             "profit_pct_str": None, "today_pct_str": None,
+             "valued_count": 0, "missing_count": 0, "missing_codes": [],
+             "known_value_cents": None, "known_cost_cents": None,
+             "known_profit_cents": None, "known_today_profit_cents": None,
+             "data_as_of": None, "data_age_days": None, "known_note": None}
+        total_cost = 0
+        valued = []
+        missing = []
+        nav_dates = set()
         for h in holdings:
-            cost += h["cost_cents"] or 0
-            mv = h["market_value_cents"]
-            if mv is not None:
-                mv_any = True
-                total += mv
-                profit += h["profit_cents"] or 0
-            if h["today_profit_cents"] is not None:
-                today += h["today_profit_cents"]
-                today_n += 1
-        s["cost_cents"] = cost
-        if mv_any:
-            s["total_cents"] = total
-            s["profit_cents"] = profit
-            s["profit_pct_str"] = _pct1_str(profit, cost)
-        if today_n:
-            s["today_profit_cents"] = today
-            # 今日盈亏% = 今日盈亏 / 昨日市值（与已验收原型口径一致；分母仅计有净值部分）
-            if mv_any and (total - today) > 0:
-                s["today_pct_str"] = _pct2_str_for(total - today, today)
+            total_cost += h["cost_cents"] or 0
+            if h["market_value_cents"] is not None:
+                valued.append(h)
+                if h.get("nav_date"):
+                    nav_dates.add(h["nav_date"])
+            else:
+                missing.append(h)
+        s["cost_cents"] = total_cost
+        s["valued_count"] = len(valued)
+        s["missing_count"] = len(missing)
+        s["missing_codes"] = [h["fund_code"] for h in missing]
+        complete = len(holdings) > 0 and not missing
+        s["complete"] = complete
+
+        # 已知部分小计（部分缺失时供首页克制展示，带明确标签）
+        if valued:
+            known_value = sum(h["market_value_cents"] for h in valued)
+            known_cost = sum(h["cost_cents"] or 0 for h in valued)
+            s["known_value_cents"] = known_value
+            s["known_cost_cents"] = known_cost
+            s["known_profit_cents"] = known_value - known_cost
+            known_today = [h["today_profit_cents"] for h in valued
+                           if h["today_profit_cents"] is not None]
+            if known_today:
+                s["known_today_profit_cents"] = sum(known_today)
+
+        # 完整组合口径：仅在数据完整时成立
+        if complete:
+            total_value = sum(h["market_value_cents"] for h in valued)
+            total_profit = sum(h["profit_cents"] or 0 for h in valued)
+            s["total_cents"] = total_value
+            s["profit_cents"] = total_profit
+            s["profit_pct_str"] = _pct_ratio_str(total_profit, total_cost)
+            today_parts = [h["today_profit_cents"] for h in valued
+                           if h["today_profit_cents"] is not None]
+            if today_parts:
+                today_total = sum(today_parts)
+                s["today_profit_cents"] = today_total
+                # 今日盈亏% = 今日盈亏 / 昨日市值
+                if (total_value - today_total) > 0:
+                    s["today_pct_str"] = _pct2_str_for(total_value - today_total, today_total)
+
+        # 数据截止日期与距今天数（客观陈述，不发明「过期」阈值）
+        if nav_dates:
+            data_as_of = max(nav_dates)
+            s["data_as_of"] = data_as_of
+            try:
+                d = datetime.date.fromisoformat(data_as_of)
+                s["data_age_days"] = (datetime.date.today() - d).days
+            except ValueError:
+                pass
+        if missing:
+            s["known_note"] = (
+                f"{len(holdings)} 只持仓中有 {len(missing)} 只缺少有效净值，"
+                "以下金额仅为已取得净值的持仓市值，不是完整组合总市值。")
         return s
 
     # ---------- 基金搜索 ----------
     def search_fund(self, keyword):
         """按名称/代码搜索全市场真实基金（首次联网加载名单约几秒，此后走缓存）；
-        网络失败返回 {"items": [], "offline": true}，界面如实提示。"""
+        网络失败返回 {"items": [], "offline": true}，界面如实提示。
+        联网失败但存在过期磁盘缓存时，stale=true 并带 cache_at 供界面标注更新时间。"""
         try:
-            return {"items": fund_list.search(keyword, 20), "offline": False}
+            items = fund_list.search(keyword, 20)
+            info = fund_list.cache_info()
+            return {
+                "items": items,
+                "offline": False,
+                "stale": bool(info.get("stale")),
+                "cache_at": info.get("fetched_at") or 0,
+            }
         except Exception:
             return {"items": [], "offline": True}
+
+    def get_portfolio_report(self):
+        """组合体检：只读 holding 持仓 + 真实净值，调纯计算模块返回结构化报告。
+
+        不联网、不写库；仅统计 status='holding' 且未删除的基金，watch/closed 不混入。
+        无 holding 持仓时返回纯计算模块的 empty 说明，界面显示诚实空态。
+        """
+        conn = dbm.connect()
+        try:
+            holds = conn.execute(
+                "SELECT h.fund_code, h.shares_scaled, h.cost_cents, "
+                " f.name, f.fund_type FROM holdings h "
+                "JOIN fund_meta f ON f.code = h.fund_code "
+                "WHERE h.status='holding' AND h.deleted=0 ORDER BY h.fund_code"
+            ).fetchall()
+            positions = []
+            for r in holds:
+                nav_rows = [{
+                    "date": x["nav_date"],
+                    "nav": x["unit_nav_scaled"],
+                    "pct": x["daily_pct_scaled"],
+                } for x in conn.execute(
+                    "SELECT nav_date, unit_nav_scaled, daily_pct_scaled "
+                    "FROM fund_nav_daily WHERE fund_code=? ORDER BY nav_date",
+                    (r["fund_code"],)
+                ).fetchall()]
+                positions.append({
+                    "code": r["fund_code"],
+                    "name": r["name"],
+                    "fund_type": r["fund_type"] or "",
+                    "shares_scaled": r["shares_scaled"],
+                    "cost_cents": r["cost_cents"],
+                    "nav_rows": nav_rows,
+                })
+            return portfolio_analysis.build_report(positions)
+        finally:
+            conn.close()
 
     # ---------- 持仓操作 ----------
     def get_fund_snapshot(self, code):
@@ -941,7 +1349,8 @@ class Api:
             return {"ok": False, "error": warning or "暂时没有该基金的真实净值"}
         out = {
             "ok": True,
-            "nav_str": str(cv.nav_from_scaled(cached["unit_nav_scaled"])),
+            "nav_str": _nav_str(cached["unit_nav_scaled"]),
+            "nav_scaled": cached["unit_nav_scaled"],
             "nav_date": cached["nav_date"],
             "fetched_at": cached["fetched_at"],
             "source": SOURCE_LABELS.get(cached["source"], cached["source"]),
@@ -1118,6 +1527,22 @@ class Api:
     # 真实联网，属于重复刷新。页面现在只做三件事：首屏读本地数据、用户手动点刷新、
     # 收到 Python 完成事件后重取一次。
 
+    def refresh_data(self):
+        """手动刷新统一周期：净值 + 行情 + 市场事件共用一次刷新时间。
+
+        页面上的「刷新数据」走这里，不再只刷净值，避免净值时间前进而事件时间不动。
+        后台线程复用 refresher.tick 的互斥锁和逐任务隔离；若刚巧有启动/定时刷新在跑，
+        本轮会安全跳过，不叠加联网请求。
+        """
+        threading.Thread(
+            target=refresher.tick,
+            args=(self,),
+            kwargs={"notify": self._notify_js},
+            daemon=True,
+            name="xltc-manual-refresh",
+        ).start()
+        return {"ok": True, "queued": True}
+
     def refresh_all_nav(self, codes, mode="manual"):
         """手动刷新（界面按钮）：立即后台联网更新，完成时派发 dataUpdated 事件"""
         codes = _clean_codes(codes)
@@ -1126,44 +1551,41 @@ class Api:
         return {"ok": True}
 
     def refresh_nav(self, code):
-        """立即联网刷新一只基金净值（带锁同步，前端显示加载态），返回本次写入行数"""
-        with NAV_REFRESH_LOCK:
-            try:
-                return {"ok": True, "rows": src.refresh_fund_nav(code)}
-            except Exception as e:
-                return {"ok": False, "error": f"刷新失败：{e}"}
+        """立即联网刷新一只基金净值（带锁同步，前端显示加载态）。
+
+        走 refresher.refresh_nav 统一入口，以便净值变化能派发给提醒引擎；
+        返回 {ok, error?}，失败时库里旧净值原样保留。
+        """
+        code = str(code or "").strip()
+        if not code:
+            return {"ok": False, "error": "基金代码为空"}
+        out = refresher.refresh_nav([code], notify=None, mode="manual")
+        report = out.get("report") or []
+        if not report:
+            return {"ok": False, "error": "基金代码为空"}
+        if report[0]["action"] == "failed":
+            return {"ok": False, "error": "刷新失败（旧净值保留）"}
+        return {"ok": True}
 
     def _refresh_worker(self, codes, mode):
         """后台刷新线程：逐只更新，失败只记该只；成功后把动作时间记入
-        app_meta.last_success_fetch_at（界面"何时获取"依据）；完成派发事件。
-        任何情况下都不改动库里已有的旧净值（更新失败 = 旧数据原样保留）。"""
-        failed = []
-        with NAV_REFRESH_LOCK:
-            for code in codes:
-                try:
-                    src.refresh_fund_nav(code)
-                except Exception as e:
-                    print(f"[api] 刷新净值失败 {code}: {e}")
-                    failed.append(code)
-        ok_count = len(codes) - len(failed)
-        now = dbm.now_str()
-        conn = dbm.connect()
-        try:
-            if ok_count > 0:
-                dbm.set_app_meta(conn, "last_success_fetch_at", now)
-                # 手动/添加流程也确实联了网 → 同步记"最近一次真正联网检查"时刻
-                # （首页显示口径，2026-09-26；键名以 refresher 为准，只此一处定义）
-                dbm.set_app_meta(conn, refresher.CHECK_KEY, now)
-                conn.commit()  # 界面"何时获取"依据，必须持久化
-        finally:
-            conn.close()
-        self._notify_js({
-            "type": "dataUpdated",
-            "ok": ok_count > 0,
-            "mode": mode,            # auto=打开时自动 / manual=用户手动 / add=添加后自动
-            "failed": failed,        # 失败的基金代码列表（空 = 全部成功）
-            "at": now,               # 本次刷新的动作时刻
-        })
+        app_meta.last_success_fetch_at（界面"何时获取"依据）。
+
+        2026-11-16 改为复用 refresher.refresh_nav 统一入口：
+        手动/添加流程的净值变化也会派发给提醒引擎，避免引擎收不到；
+        dataUpdated 事件由 refresh_nav 统一派发，这里不再重复派发。
+        任何情况下都不改动库里已有的旧净值（更新失败 = 旧数据原样保留）。
+        """
+        out = refresher.refresh_nav(codes, notify=self._notify_js, mode=mode)
+        report = out.get("report") or []
+        ok = [e["code"] for e in report if e["action"] != "failed"]
+        if ok:
+            conn = dbm.connect()
+            try:
+                dbm.set_app_meta(conn, "last_success_fetch_at", dbm.now_str())
+                conn.commit()
+            finally:
+                conn.close()
 
     def _spawn_nav_refresh(self, codes):
         threading.Thread(target=self._refresh_worker, args=(codes, "add"), daemon=True).start()
@@ -1190,8 +1612,10 @@ _WEEK_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"
 
 
 def _price2_str(price_scaled):
-    """点位缩放整数 → 展示字符串 '4,548.05'（界面直接显示）"""
-    return format(cv.point_from_scaled(price_scaled), ",.2f")
+    """点位缩放整数 → 展示字符串 '4,548.05'（界面直接显示，四舍五入到 2 位）"""
+    v = cv.point_from_scaled(price_scaled).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return format(v, ",.2f")
 
 
 def _bj_hm(ny_dt):
@@ -1279,31 +1703,62 @@ def _truthy(v):
     return str(v).strip().lower() in ("1", "true", "yes", "on")
 
 
-def _shares_str(shares_scaled):
-    """份额缩放整数 → 展示字符串 '23,924.00'（Decimal 格式化，界面直接显示）"""
-    if shares_scaled is None:
-        return None
-    return format(cv.shares_from_scaled(shares_scaled), ",.2f")
-
-
-def _pct2_str(pct_scaled):
-    """涨跌幅缩放整数（×10000）→ 展示字符串 '+1.82' / '-0.50' / '+0.00'"""
-    v = cv.pct_from_scaled(pct_scaled).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+def _signed_pct(v):
+    """百分比统一出口：四舍五入到 0 时显示 0.00（不带符号），正数带 +，负数带 -"""
+    if v == 0:
+        return "0.00"
     s = format(v, "f")
     return s if s.startswith("-") else "+" + s
 
 
-def _pct1_str(part_cents, whole_cents):
-    """占比百分比（分母可能为负/零）：'±x.x'（1 位小数，与已验收原型口径一致）"""
+def _nav_str(nav_scaled):
+    """单位净值缩放整数（×10000）→ 固定 4 位小数展示（1.3914 / 1.5000）"""
+    if nav_scaled is None:
+        return None
+    v = cv.nav_from_scaled(nav_scaled).quantize(
+        Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    return format(v, "f")
+
+
+def _shares_str(shares_scaled):
+    """份额缩放整数 → 固定 2 位展示字符串 '23,924.00'（界面直接显示）"""
+    if shares_scaled is None:
+        return None
+    v = cv.shares_from_scaled(shares_scaled).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return format(v, ",.2f")
+
+
+def _cost_price_str(cost_cents, shares_scaled):
+    """单位成本价 = 总本金 ÷ 份额，固定 4 位小数（1.5000）"""
+    if cost_cents is None or not shares_scaled:
+        return None
+    try:
+        v = (Decimal(cost_cents) * 100 / Decimal(shares_scaled)).quantize(
+            Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    except Exception:
+        return None
+    return format(v, "f")
+
+
+def _pct2_str(pct_scaled):
+    """涨跌幅缩放整数（×10000）→ 展示字符串 '+1.82' / '-0.50' / '0.00'"""
+    if pct_scaled is None:
+        return None
+    v = cv.pct_from_scaled(pct_scaled).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return _signed_pct(v)
+
+
+def _pct_ratio_str(part_cents, whole_cents):
+    """占比百分比（分母可能为负/零）：固定 2 位，如 '+55.61' / '-9.30'"""
     if part_cents is None or not whole_cents:
         return None
     try:
         v = (Decimal(part_cents) / Decimal(whole_cents) * 100).quantize(
-            Decimal("0.1"), rounding=ROUND_HALF_UP)
+            Decimal("0.01"), rounding=ROUND_HALF_UP)
     except Exception:
         return None
-    s = format(v, "f")
-    return s if s.startswith("-") else "+" + s
+    return _signed_pct(v)
 
 
 def _pct2_str_for(base_cents, part_cents):
@@ -1315,5 +1770,4 @@ def _pct2_str_for(base_cents, part_cents):
             Decimal("0.01"), rounding=ROUND_HALF_UP)
     except Exception:
         return None
-    s = format(v, "f")
-    return s if s.startswith("-") else "+" + s
+    return _signed_pct(v)

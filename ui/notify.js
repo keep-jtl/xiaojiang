@@ -14,9 +14,10 @@
  *    （notify_alerts_enabled）各自保存；各页面只改自己那一个键，
  *    只有"首次询问"那一次会把两者设成同一个值。
  *
- * 诚实口径（2026-09-26 用户要求）：真正的 Windows / macOS 系统桌面通知尚未实现，
- * 所以询问文案必须说清楚"现在只是保存你的偏好"，不能让用户以为点了开启
- * 就马上能收到系统通知。
+ * 当前口径（2026-11-17）：Windows 使用系统 Toast，并额外自绘 TopMost 桌面横幅
+ * （系统免打扰时仍可显示）；桌面端市场事件/盯盘提醒后台自动检查已接通。
+ * Android 已接 Capacitor 本地通知，但只在应用前台时按 60 秒检查，离开应用不保证持续盯盘。
+ * 询问文案必须说清楚能力边界，不能让用户以为点了开启就能后台常驻。
  *
  * 用法（页面侧）：
  *   xltcNotify.onChange(fn)              设置读到或变化时回调（含首次读取）
@@ -95,17 +96,40 @@
       });
     },
 
-    /* 首次询问结果：唯一会把两个开关一起设成同一个值的地方 */
+    /* 旧版首次偏好询问（保留兼容；新引导走 askSystem） */
     askFirst: function (enabled) {
       return call('ask_notify_first', !!enabled).then(function (s) {
         if (s) { S = s; fire(); }
         return S;
       });
+    },
+
+    /* 首次系统通知引导：记录已询问；选开启时同时打开两类通知偏好 */
+    askSystem: function (enabled) {
+      return call('ask_notify_system', !!enabled).then(function (s) {
+        if (s) { S = s; fire(); }
+        return S;
+      });
+    },
+
+    /* 真实系统通知测试（不是页面内模拟提示） */
+    sendTest: function (kind) {
+      return call('send_test_notification', kind || 'generic');
+    },
+
+    /* 真实通知能力（是否 Windows、通知总开关是否开启） */
+    capabilities: function () {
+      return call('get_notify_capabilities');
+    },
+
+    /* 打开 Windows 系统通知设置 */
+    openSettings: function () {
+      return call('open_notification_settings');
     }
   };
   window.xltcNotify = API;
 
-  /* ---------- 首次询问弹层（全软件只出现一次） ---------- */
+  /* ---------- 首次系统通知引导（全软件只出现一次） ---------- */
   function showAsk () {
     if (document.getElementById('xltcNotifyAsk')) return;
     if (!document.getElementById(STYLE_ID)) {
@@ -119,40 +143,106 @@
     m.id = 'xltcNotifyAsk';
     m.innerHTML =
       '<div class="ntf-card">' +
-        '<h3>🔔 消息提醒</h3>' +
-        '<p>你想接收<b>市场事件</b>和<b>盯盘提醒</b>吗？开启后小财通会记住这个偏好，' +
-          '以后可以在「市场事件」和「盯盘提醒」页面里分别单独修改。</p>' +
-        '<p class="ntf-note">说明：真正的系统桌面通知能力还在开发中，现在选择只是保存你的偏好；' +
-          '等通知功能接好之后，小财通才会按这里的设置提醒你。</p>' +
+        '<h3>🔔 开启系统通知</h3>' +
+        '<p>小财通可以使用 <b>Windows 系统通知</b>提醒你。现在开启会立即发送一条' +
+          '<b>真实测试通知</b>，你可以直接确认能不能收到。</p>' +
+        '<p class="ntf-note">说明：Windows 下会同时使用系统 Toast 与应用自绘桌面横幅；' +
+          '市场事件和盯盘提醒的<b>后台自动检查已接通</b>。Android 版已接本地通知，' +
+          '但应用离开前台后不保证持续盯盘；以后可在「市场事件」、' +
+          '「盯盘提醒」和「设置」里分别修改。</p>' +
+        '<p class="ntf-note" id="xltcNotifyStatus"></p>' +
         '<div class="ntf-foot">' +
           '<button class="btn btn-ghost btn-sm" id="xltcNotifyNo">暂时不要</button>' +
-          '<button class="btn btn-sm" id="xltcNotifyYes">开启</button>' +
+          '<button class="btn btn-sm" id="xltcNotifyYes">开启并测试</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(m);
 
+    var status = m.querySelector('#xltcNotifyStatus');
+
+    /* 系统通知设置入口只保留一个：初始化、每次重试都复用同一个按钮，
+       不再每点一次“再试一次”就追加一个新按钮（2026-11-17 人工验收修复）。 */
+    function ensureOpenSettingsButton () {
+      var foot = m.querySelector('.ntf-foot');
+      var b = m.querySelector('#xltcNotifyOpen');
+      if (!b) {
+        b = document.createElement('button');
+        b.className = 'btn btn-ghost btn-sm';
+        b.id = 'xltcNotifyOpen';
+        b.textContent = '打开系统通知设置';
+        b.addEventListener('click', function () { API.openSettings(); });
+        foot.insertBefore(b, m.querySelector('#xltcNotifyYes'));
+      }
+      return b;
+    }
+
+    /* 如果 Windows 通知总开关是关的，提前说清楚，并给出真实可点的设置入口 */
+    API.capabilities().then(function (cap) {
+      if (cap && cap.toast_enabled === false) {
+        status.textContent = '应用内提醒偏好可以保存，但 Windows 系统通知总开关当前是关闭的，实际收不到 Toast。请先打开系统通知设置。';
+        status.style.color = 'var(--tag-orange-ink, #b54708)';
+        ensureOpenSettingsButton();
+      }
+    }).catch(function () { /* 能力读取失败不阻断引导 */ });
+
+    function close () {
+      m.classList.remove('open');
+      m.remove();
+    }
+
+    function fail (text) {
+      m.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+      status.textContent = text;
+      status.style.color = 'var(--tag-red-ink, #b42318)';
+      if (!m.querySelector('#xltcNotifyClose')) {
+        var b = document.createElement('button');
+        b.className = 'btn btn-ghost btn-sm';
+        b.id = 'xltcNotifyClose';
+        b.textContent = '关闭';
+        b.addEventListener('click', close);
+        m.querySelector('.ntf-foot').appendChild(b);
+      }
+    }
+
     function finish (enabled) {
-      var btns = m.querySelectorAll('button');
-      btns.forEach(function (b) { b.disabled = true; });
-      API.askFirst(enabled).then(function () {
-        m.classList.remove('open');
-        m.remove();
-      }).catch(function () {
-        /* 写库失败：不假装已保存，说清楚（下次启动会再问一次） */
-        btns.forEach(function (b) { b.disabled = false; });
-        if (!m.querySelector('.ntf-err')) {
-          var p = document.createElement('p');
-          p.className = 'ntf-note ntf-err';
-          p.textContent = '保存失败：本机数据服务暂时不可用，这次选择没有记住，下次启动会再问一次。';
-          m.querySelector('.ntf-card').appendChild(p);
+      m.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      if (!enabled) {
+        API.askSystem(false).then(close).catch(function () {
+          fail('保存失败：本机数据服务暂时不可用，这次选择没有记住，下次启动会再问一次。');
+        });
+        return;
+      }
+      status.textContent = '正在保存偏好并发送真实测试通知…';
+      status.style.color = '';
+      API.askSystem(true).then(function () {
+        return API.sendTest('generic');
+      }).then(function (r) {
+        if (r && r.ok && r.toast_enabled === false) {
+          status.textContent = '应用内偏好已保存，但 Windows 系统通知总开关当前仍是关闭的，所以看不到 Toast。请打开系统通知设置后再试；这个入口只会保留一个。';
+          status.style.color = 'var(--tag-orange-ink, #b54708)';
+          m.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+          m.querySelector('#xltcNotifyYes').textContent = '再试一次';
+          ensureOpenSettingsButton();
+        } else if (r && r.ok) {
+          status.textContent = r.banner
+            ? '已发送 Windows 通知；桌面横幅已弹出（免打扰下也可见）。'
+            : '已提交到 Windows 通知中心；桌面横幅未能拉起，请检查系统通知设置。';
+          status.style.color = '';
+          m.querySelector('#xltcNotifyYes').textContent = '已发送';
+          setTimeout(close, 2200);
+        } else {
+          fail('通知发送失败：' + ((r && r.error) || '未知原因') +
+               '。偏好已保存，可稍后在「设置 → 通知」重试。');
         }
+      }).catch(function (err) {
+        fail('通知发送失败：' + (err && err.message ? err.message : '本机通知服务不可用') +
+             '。偏好已保存，可稍后在「设置 → 通知」重试。');
       });
     }
     document.getElementById('xltcNotifyYes').addEventListener('click', function () { finish(true); });
     document.getElementById('xltcNotifyNo').addEventListener('click', function () { finish(false); });
 
-    /* 故意不做"点遮罩就关掉"：首次询问需要一个明确选择，
-       否则用户每换一页都会再弹一次，反而更打扰（2026-09-26）。 */
+    /* 故意不做"点遮罩就关掉"：首次引导需要一个明确选择。 */
     m.classList.add('open');
   }
 
@@ -162,7 +252,8 @@
     if (window.pywebview && window.pywebview.api) {
       clearInterval(timer);
       API.refresh().then(function (s) {
-        if (!s || !on(s.first_asked)) showAsk();   /* 已问过 → 永不自动询问 */
+        /* 新键 system_asked：老用户也会看到一次“系统通知引导”，之后永不再自动弹 */
+        if (!s || !on(s.system_asked)) showAsk();
       }).catch(function () { /* 读不到就静默，不打扰用户，下次启动再说 */ });
     } else if (++tries > 100) {
       clearInterval(timer);   /* 数据服务没就绪（例如直接用浏览器打开页面）：什么都不弹 */

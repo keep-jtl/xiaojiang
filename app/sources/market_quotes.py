@@ -26,6 +26,8 @@ TENCENT_MAP = {
     "sh000300": "sh000300", "sh000001": "sh000001", "sh000905": "sh000905",
     "sz399006": "sz399006", "hkHSI": "hkHSI", "hkHSTECH": "hkHSTECH",
     "usSPX": "usINX", "usNDX": "usNDX", "usDJI": "usDJI",
+    "sh512480": "sh512480", "sh515790": "sh515790", "sh512660": "sh512660",
+    "sh512800": "sh512800", "sh518880": "sh518880",
 }
 SINA_MAP = {
     "sh000300": "sh000300", "sh000001": "sh000001", "sh000905": "sh000905",

@@ -66,6 +66,8 @@ class AlertEngine:
         self._last_quote_refresh = {}
         self._listener = self.on_nav_report
         self._listener_registered = False
+        self._last_tick_at = None
+        self._last_error = None
 
     # ---------- 生命周期 ----------
     def start(self):
@@ -107,12 +109,26 @@ class AlertEngine:
         print("[alert_engine] 提醒引擎已停止")
         return True
 
+    def status_dict(self):
+        """供 UI 真实状态驱动；不把“线程对象存在”等同于引擎健康。"""
+        thread_alive = bool(self._thread and self._thread.is_alive())
+        return {
+            "engine_running": bool(self._started and thread_alive),
+            "thread_alive": thread_alive,
+            "baseline_ready": not self._nav_baseline_pending,
+            "last_check_at": self._last_tick_at,
+            "last_error": self._last_error,
+        }
+
     def _loop(self):
         while not self._stop.is_set():
             t0 = self.monotonic_fn()
             try:
                 self.tick()
+                self._last_tick_at = _fmt(self.now_fn())
+                self._last_error = None
             except Exception as e:
+                self._last_error = str(e)
                 print(f"[alert_engine] tick 异常（不影响后续）: {e}")
             remain = max(1.0, TICK_SECONDS - (self.monotonic_fn() - t0))
             self._stop.wait(remain)
@@ -548,3 +564,18 @@ def stop():
     with _ENGINE_LOCK:
         engine = _ENGINE
     return engine.stop() if engine else False
+
+
+def status():
+    """模块级引擎状态；引擎未启动时返回安全的默认值（不假装运行）。"""
+    with _ENGINE_LOCK:
+        engine = _ENGINE
+    if engine is None:
+        return {
+            "engine_running": False,
+            "thread_alive": False,
+            "baseline_ready": False,
+            "last_check_at": None,
+            "last_error": None,
+        }
+    return engine.status_dict()

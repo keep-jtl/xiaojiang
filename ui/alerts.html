@@ -50,8 +50,9 @@
   .switch::after { content: ''; position: absolute; width: 17px; height: 17px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
   .switch.on { background: var(--brand); opacity: 1; }
   .switch.on::after { left: 19px; }
+  .switch.disabled { pointer-events: none; cursor: default; opacity: .3; }
 
-  /* 历史记录样式（1A 暂未使用，保留给下一阶段） */
+  /* 历史触发记录样式（引擎接通后已用于真实历史） */
   .hist-item { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px dashed var(--card-border); font-size: 13px; }
   .hist-item:last-child { border-bottom: none; }
   .hist-item .t { color: var(--ink-3); font-size: 12px; flex-shrink: 0; width: 52px; }
@@ -90,6 +91,17 @@
   .ntf-bar .nb-text b { font-weight: 600; color: var(--ink); font-size: 13px; display: block; }
   .ntf-bar .nb-text span { display: block; color: var(--ink-3); font-size: 12px; }
 
+  /* 引擎真实运行状态条（不写死“运行中”，由 get_engine_status 驱动） */
+  .eng-bar { display: flex; align-items: center; gap: 10px; background: var(--bg-soft); border: 1px solid var(--card-border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 12.5px; color: var(--ink-2); }
+  .eng-bar .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--ink-3); }
+  .eng-bar .dot.run { background: var(--up); }
+  .eng-bar .dot.stop { background: var(--tag-red-ink); }
+  .eng-bar .et-text { flex: 1; min-width: 0; }
+  .eng-bar .et-text b { display: block; font-size: 13px; color: var(--ink); font-weight: 600; }
+  .eng-bar .et-text span { display: block; color: var(--ink-3); font-size: 12px; margin-top: 1px; }
+  .eng-bar.run { border-color: var(--up); }
+  .eng-bar.stop { border-color: var(--tag-red-ink); }
+
   /* 后台运行演示：托盘 / 最小化状态层（需求见产品规划第 22 节） */
   .tray-pill { position: fixed; right: 20px; bottom: 20px; z-index: 70; background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.3); overflow: hidden; min-width: 210px; }
   .tray-btn { border: none; background: none; padding: 10px 14px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; }
@@ -119,19 +131,19 @@
 <!-- 顶部导航 -->
 <header class="topbar">
   <div class="topbar-inner">
-    <div class="logo"><span class="logo-dot"></span><span class="logo-text">小财通</span></div>
+    <div class="logo"><img class="logo-img" src="assets/brand/xltc-logo.png?v=r4.3" alt="小财通"><span class="logo-text">小财通</span></div>
     <nav class="nav" id="mainNav"></nav>
     <div class="topbar-right">
       <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
-      <button id="closeDemoBtn" class="btn btn-ghost btn-sm">⏻ 演示关闭窗口</button>
-      <span>规则已保存 · 检查未接通</span>
+      <button id="closeDemoBtn" class="btn btn-ghost btn-sm" title="关闭到系统托盘，后台继续盯盘">⏻ 关闭到托盘</button>
+      <span id="topStatus">盯盘监测：启动中…</span>
     </div>
   </div>
 </header>
 
 <main class="page">
   <div class="page-title">盯盘提醒</div>
-  <div class="page-sub">本阶段先把提醒条件真实保存到本机；添加、编辑、暂停、删除和关闭软件再打开都会保留。提醒检查引擎、Windows 系统通知和触发历史将在下一阶段接入。</div>
+  <div class="page-sub">盯盘规则根据最新可用行情和基金净值进行检查；触发记录会保存到本机，通知提交结果与已读状态分开记录。</div>
 
   <!-- 操作区 -->
   <div class="page-actions">
@@ -141,11 +153,21 @@
   <!-- 系统提示条（通知询问结果等） -->
   <div class="history-note" id="sysNote" style="display:none;"></div>
 
+  <!-- 引擎真实运行状态（由 get_engine_status 驱动） -->
+  <div class="eng-bar" id="engineBar">
+    <span class="dot" id="engineDot"></span>
+    <span class="et-text"><b id="engineTitle">盯盘监测：启动中…</b><span id="engineSub">正在读取本机监测状态</span></span>
+  </div>
+
   <!-- 盯盘提醒通知开关（2026-09-26 起与市场事件页相互独立：本开关只改 notify_alerts_enabled） -->
   <div class="ntf-bar" id="alertsNtfBar">
     <span class="nb-ico">🔔</span>
-    <span class="nb-text"><b>盯盘提醒通知偏好：读取中</b><span>通知偏好已保存；检查引擎与 Windows 系统通知尚未接通 · 与市场事件页相互独立</span></span>
-    <span class="switch" id="alertsSubSwitch"></span>
+    <span class="nb-text"><b>桌面通知偏好：读取中</b><span>与市场事件页相互独立</span></span>
+    <span class="switch" id="alertsSubSwitch" title="点击开关启用/关闭"></span>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px; margin:8px 2px 0; flex-wrap:wrap;">
+    <button class="btn btn-ghost btn-sm" id="alertsTestBtn">发送测试通知</button>
+    <span class="card-hint" id="alertsNtfStatus">测试通知只验证通道，不会写入触发记录，也不影响盯盘规则。</span>
   </div>
 
   <!-- 统计概览（随列表操作实时变化，非写死数字） -->
@@ -164,28 +186,29 @@
   <div class="group-title" id="fundHead">我的基金 <span class="cnt" id="fundCnt"></span></div>
   <div id="fundRows"></div>
 
-  <!-- 预置指数提醒（当前真实数据只有 market_meta 的 9 个指数，无赛道/黄金） -->
+  <!-- 预置市场对象：9 个指数 + 4 个真实赛道 ETF + 1 个黄金 ETF（ETF 为代理，不是指数本身） -->
   <div class="group-title" id="mktHead">指数提醒 <span class="cnt" id="mktCnt"></span></div>
   <div id="mktRows"></div>
 
   <!-- 全部为空时 -->
   <div class="card empty-card" id="emptyAll" style="display:none;">
     <div>还没有任何提醒。</div>
-    <div style="font-size:12px; color:var(--ink-3); margin-top:6px;">设好条件后先真实保存；提醒检查与桌面通知下一阶段接入。</div>
+    <div style="font-size:12px; color:var(--ink-3); margin-top:6px;">添加后立即真实保存；达到条件会产生触发记录。</div>
     <button class="btn btn-sm" id="emptyAddBtn">＋ 添加提醒</button>
   </div>
 
-  <!-- 历史触发记录：1A 不实现触发历史，这里保持真实空态 -->
-  <div class="group-title">历史触发记录 <span class="cnt">本阶段未接通</span></div>
-  <div class="card">
-    <div class="freq-note" style="margin:0;">提醒检查尚未接通，暂无触发记录。下一阶段接入检查引擎后，才会产生真实历史。</div>
+  <!-- 历史触发记录（真实 alert_events） -->
+  <div class="group-title">历史触发记录 <span class="cnt" id="histCnt">读取中</span></div>
+  <div class="card" id="histCard">
+    <div id="histRows"></div>
+    <div class="freq-note" id="histEmpty" style="margin:0; display:none;">暂无触发记录。达到提醒条件后会在这里显示。</div>
   </div>
 
   <!-- 添加 / 编辑提醒弹层 -->
   <div class="modal-mask" id="addModal">
     <div class="modal">
       <h3 id="formTitle">＋ 添加提醒</h3>
-      <div class="m-sub" id="formSub">先保存提醒条件；检查引擎与桌面通知下一阶段接入。</div>
+      <div class="m-sub" id="formSub">保存后立即生效；达到条件会产生触发记录。</div>
 
       <div class="m-sec">① 选对象</div>
       <div class="seg" id="objTab">
@@ -209,7 +232,7 @@
         <span id="unitText">%</span>
       </div>
 
-      <div class="freq-note" id="freqNote">计划规则：预置指数盘中检查、场外基金收盘后检查；检查引擎下一阶段接入。当前真实指数清单为 9 个，赛道/黄金尚未接入。</div>
+      <div class="freq-note" id="freqNote">计划规则：预置指数盘中检查、场外基金收盘后检查。当前市场对象 14 个（9 个指数 + 4 个赛道 ETF + 1 个黄金 ETF）；ETF 只作为赛道/黄金代理，不是指数本身。</div>
 
       <div class="m-sec">③ 有效期 <span style="color:var(--ink-3); font-weight:400;">只需选一个快捷选项</span></div>
       <div class="seg" id="validTab">
@@ -279,21 +302,9 @@
        首次询问改为**应用级、只问一次**，由 ui/notify.js 统一负责
        （状态存在 SQLite settings.notify_first_asked，问过之后任何页面都不再问）。 -->
 
-  <!-- 后台运行状态演示层：主窗口最小化遮罩 + 托盘图标（C1） -->
-  <div class="min-overlay" id="minOverlay" style="display:none;">
-    <div id="minOverlayText">主窗口已最小化到后台<br><small>点击右下角托盘图标 → 打开主界面（演示）</small></div>
-  </div>
-  <div class="tray-pill" id="trayPill" style="display:none;">
-    <button class="tray-btn" id="trayBtn">🗂 小财通 · 后台运行中 ▾</button>
-    <div class="tray-tip" id="trayTip" style="display:none;">小财通仍在后台运行，点击托盘图标可打开或退出（首次提示）</div>
-    <div class="tray-menu" id="trayMenu" style="display:none;">
-      <button id="trayOpen">打开主界面</button>
-      <button id="trayPause">暂停所有提醒</button>
-      <button id="trayQuit">退出小财通</button>
-    </div>
-  </div>
+  <!-- 关闭窗口确认 / 退出二次确认见上方弹层；真实托盘由 app/tray.py 提供，不在网页内模拟。 -->
 
-  <div class="demo-note">✓ 本页提醒规则已真实保存到本机 SQLite：添加、编辑、暂停/恢复、删除，以及关闭软件再打开后都会保留。监控对象来自真实持仓/关注基金和预置指数（当前 9 个指数，赛道/黄金尚未接入）。<b>本阶段未接通</b>：提醒检查引擎、5 分钟调度、Windows 系统通知、触发历史。通知开关只保存偏好，不会产生系统通知；市场事件页的通知开关与本页相互独立。托盘/开机自启/关闭窗口仍是网页演示。</div>
+  <div class="demo-note">✓ 提醒规则真实保存到本机 SQLite：添加、编辑、暂停/恢复、删除，以及关闭软件再打开后都会保留。监控对象来自真实持仓/关注基金和 14 个预置市场对象（9 个指数 + 4 个赛道 ETF + 1 个黄金 ETF；ETF 仅作代理）。盯盘引擎在后台按最新可用行情与基金净值检查，触发记录与通知提交结果、已读状态分开保存。<br><b>监测边界：</b>仅在程序运行且取得有效数据时本地监测；程序关闭、休眠或断网期间不保证持续盯盘或补发提醒。关闭主窗口默认最小化到系统托盘（可在设置中改为直接退出）；登录自启动可在「设置」中开关。</div>
 </main>
 
 <script src="nav.js"></script>
@@ -312,6 +323,7 @@
   var MKTS = [];        // market_meta 预置指数
   var ALERTS = [];      // 真实提醒规则（页面视图模型）
   var enabledCount = 0; // 与首页 get_today_alerts().enabled_count 同一口径
+  var todayInfo = null;  // get_today_alerts()：真实今日触发查询结果（引擎未接通时 today 为空）
   var loaded = false;
   var loadError = false;
   var saving = false;
@@ -339,6 +351,15 @@
       loadError = false;
       buildOptLists();
       renderAll();
+      // 今日已触发：真实查询 alert_events；引擎未接通时结果为空，不伪造数字。
+      call('get_today_alerts').then(function (t) {
+        todayInfo = t || null;
+        renderStats();
+      }).catch(function () {
+        todayInfo = null;
+        renderStats();
+      });
+      renderHistory();   /* 规则变化后同步刷新真实触发历史 */
       return true;
     }).catch(function (e) {
       loaded = false;
@@ -368,7 +389,7 @@
       '<div class="note">' + escHtml(r.condNote) + '</div></div>' +
       '<div class="eff"><b>' + escHtml(r.effMain) + '</b><span>' + escHtml(r.effSub) + '</span>' +
       (r.note ? '<span>📝 ' + escHtml(r.note) + '</span>' : '') + '</div>' +
-      '<div class="last"><b>—</b>触发历史未接入</div>' +
+      '<div class="last"><b>—</b>暂无触发记录</div>' +
       '<div class="ops"><span class="switch' + (r.on ? ' on' : '') + '" data-on="' + (r.on ? 1 : 0) +
       '" title="' + (r.on ? '点击暂停' : '点击恢复') + '"></span>' +
       '<button class="icon-btn" data-act="edit" title="编辑">✎</button>' +
@@ -398,9 +419,9 @@
     var p1 = ALERTS.filter(function (r) { return r.zone === 'plan' && r.on; }).length;
     var f1 = ALERTS.filter(function (r) { return r.zone === 'fund' && r.on; }).length;
     var m1 = ALERTS.filter(function (r) { return r.zone === 'mkt' && r.on; }).length;
-    document.getElementById('planCnt').textContent = plan.length + ' 条 · ' + p1 + ' 启用 · 检查引擎未接通';
-    document.getElementById('fundCnt').textContent = fund.length + ' 条 · ' + f1 + ' 启用 · 检查引擎未接通';
-    document.getElementById('mktCnt').textContent = mkt.length + ' 条 · ' + m1 + ' 启用 · 检查引擎未接通';
+    document.getElementById('planCnt').textContent = plan.length + ' 条 · ' + p1 + ' 启用';
+    document.getElementById('fundCnt').textContent = fund.length + ' 条 · ' + f1 + ' 启用';
+    document.getElementById('mktCnt').textContent = mkt.length + ' 条 · ' + m1 + ' 启用';
   }
 
   function renderStats () {
@@ -412,10 +433,20 @@
       ? ('生效 ' + active.length + ' · 计划 ' + planned.length)
       : '还没有启用的提醒';
     document.getElementById('stPlan').textContent = planned.length;
-    document.getElementById('stPlanSub').textContent = planned.length ? '到生效时间后检查（引擎未接通）' : '暂无';
+    document.getElementById('stPlanSub').textContent = planned.length ? '到生效时间后开始检查' : '暂无';
     document.getElementById('stPause').textContent = paused.length;
-    document.getElementById('stToday').textContent = '—';
-    document.getElementById('stTodaySub').textContent = '提醒检查尚未接通；本阶段只保存规则';
+    var todayEl = document.getElementById('stToday');
+    var todaySub = document.getElementById('stTodaySub');
+    if (!todayInfo) {
+      todayEl.textContent = '—';
+      todaySub.textContent = '正在读取今日触发';
+    } else {
+      var n = (todayInfo.today || []).length;
+      todayEl.textContent = n + ' 条';
+      todaySub.textContent = n
+        ? '今日真实触发记录'
+        : '今日 0 条触发';
+    }
   }
 
   function renderAll () {
@@ -493,8 +524,8 @@
 
   function setFreq () {
     document.getElementById('freqNote').innerHTML = isFundMode()
-      ? '计划规则：场外基金收盘后检查净值；检查引擎下一阶段接入。'
-      : '计划规则：预置指数盘中检查；检查引擎下一阶段接入。当前只有 9 个真实指数，赛道/黄金未接入。';
+      ? '计划规则：场外基金收盘后检查净值。'
+      : '计划规则：预置指数盘中检查。当前 14 个市场对象真实可用（9 个指数 + 4 个赛道 ETF + 1 个黄金 ETF；ETF 仅作代理）。';
   }
 
   /* 单位与占位符随 条件类型 + 对象类型 变化：基金数值线盯"净值（元）"，指数数值线盯"点数" */
@@ -512,7 +543,7 @@
   function resetForm () {
     mode = 'add'; editId = null;
     document.getElementById('formTitle').textContent = '＋ 添加提醒';
-    document.getElementById('formSub').textContent = '先保存提醒条件；检查引擎与桌面通知下一阶段接入。';
+    document.getElementById('formSub').textContent = '保存后立即生效；达到条件会产生触发记录。';
     /* 对象：不替你选，需要你点选（tab 只决定看哪份清单） */
     clearOptSel(document.getElementById('mktList'));
     clearOptSel(document.getElementById('fundList'));
@@ -806,7 +837,7 @@
           不再使用 localStorage，也不再与市场事件页共用"总状态"；
         - 本页只改这一个键，市场事件页的 notify_news_enabled 一概不碰；
         - 首次询问 = 应用级、全软件只问一次，由 ui/notify.js 负责。
-        （真正的 Windows 系统桌面通知尚未实现，这里保存的是"你的偏好"）
+        （Windows 使用系统 Toast + 应用自绘 TopMost 横幅；这里保存的是你的偏好与真实开关状态）
      ========================================================== */
   function sysNote (text, isErr) {
     var n = document.getElementById('sysNote');
@@ -823,24 +854,155 @@
     var on = alertsNtfOn();
     bar.classList.toggle('on', on);
     bar.querySelector('.nb-ico').textContent = on ? '🔔' : '🔕';
-    bar.querySelector('.nb-text b').textContent = '盯盘提醒通知偏好：' + (on ? '已开启' : '已关闭');
+    bar.querySelector('.nb-text b').textContent = '桌面通知偏好：' + (on ? '已开启' : '已关闭');
     bar.querySelector('.nb-text span').textContent = on
-      ? '通知偏好已保存；提醒检查引擎与 Windows 系统通知尚未接通 · 与市场事件页相互独立'
-      : '通知偏好已保存；检查引擎、系统通知与触发历史尚未接通 · 点击右侧开关可重新开启';
+      ? '触发盯盘规则时会尝试弹出 Windows 通知 · 与市场事件页相互独立'
+      : '关闭后规则仍会检查并保存触发记录，只是不弹通知 · 与市场事件页相互独立';
     bar.querySelector('.switch').classList.toggle('on', on);
   }
   /* 开关：直接切换并写库（两页相互独立，不再有"总状态关 → 弹层重新询问"的连带逻辑） */
   document.getElementById('alertsSubSwitch').addEventListener('click', function () {
     xltcNotify.set({ alerts_enabled: !alertsNtfOn() });
   });
+
+  /* 真实系统通知测试：调用 Python 发 Windows Toast */
+  var alertsTestBtn = document.getElementById('alertsTestBtn');
+  var alertsNtfStatus = document.getElementById('alertsNtfStatus');
+  xltcNotify.capabilities().then(function (cap) {
+    if (cap && cap.toast_enabled === false) {
+      alertsNtfStatus.textContent = 'Windows 系统通知当前是关闭的；请到「设置 → 通知」打开后再测试。';
+    }
+  }).catch(function () { /* 能力读取失败不阻断页面 */ });
+  alertsTestBtn.addEventListener('click', function () {
+    alertsTestBtn.disabled = true;
+    alertsNtfStatus.textContent = '正在发送测试通知…';
+    xltcNotify.sendTest('alerts').then(function (r) {
+      alertsTestBtn.disabled = false;
+      if (r && r.ok && r.toast_enabled === false) {
+        alertsNtfStatus.textContent = '已提交，但 Windows 系统通知总开关当前是关闭的，可能收不到；请到「设置 → 通知」打开系统通知设置后再试。';
+      } else {
+        alertsNtfStatus.textContent = (r && r.ok)
+          ? (r.banner ? '已发送 Windows 通知；桌面横幅已弹出（免打扰下也可见）。' : '已提交到 Windows 通知中心；桌面横幅未能拉起，请检查系统通知设置。')
+          : '发送失败：' + ((r && r.error) || '未知原因');
+      }
+    }).catch(function (err) {
+      alertsTestBtn.disabled = false;
+      alertsNtfStatus.textContent = '发送失败：' + (err && err.message ? err.message : '本机通知服务不可用');
+    });
+  });
+
   /* 设置从 SQLite 读到、或发生变化时刷新显示（含首次读取；首次询问答完后本页自动更新） */
   xltcNotify.onChange(renderAlertsNtf);
 
-  /* 开机自启询问（同意保留桌面通知后询问一次，拒绝后不反复） */
+  /* ==========================================================
+     7. 引擎真实运行状态（get_engine_status；定时轮询，不写死“运行中”）
+     ========================================================== */
+  var engineStatus = null;
+  function renderEngine (st) {
+    var bar = document.getElementById('engineBar');
+    var dot = document.getElementById('engineDot');
+    var title = document.getElementById('engineTitle');
+    var sub = document.getElementById('engineSub');
+    var top = document.getElementById('topStatus');
+    bar.classList.remove('run', 'stop');
+    dot.classList.remove('run', 'stop');
+    if (!st) {
+      title.textContent = '盯盘监测：状态未知';
+      sub.textContent = '暂时读不到监测状态';
+      top.textContent = '盯盘监测：状态未知';
+      return;
+    }
+    /* 应用内偏好与 Windows 系统总开关分开显示，不能把“偏好已开”写成“桌面通知已开启”。 */
+    var sysTxt = st.toast_enabled === false ? '关'
+      : (st.toast_enabled === true ? '开' : '未知');
+    var notifyTxt = st.notifications_enabled
+      ? ('应用内提醒：开 · 系统通知：' + sysTxt)
+      : '应用内提醒：关';
+    if (st.engine_running) {
+      bar.classList.add('run'); dot.classList.add('run');
+      title.textContent = '盯盘监测：运行中 · ' + notifyTxt;
+      var last = st.last_check_at ? ('最近检查：' + st.last_check_at + '；') : '';
+      if (!st.notifications_enabled) {
+        sub.textContent = last + '规则仍会监测并记录，只是不发送通知';
+      } else if (st.toast_enabled === false) {
+        sub.textContent = last + 'Windows 系统通知总开关当前关闭，实际收不到 Toast；请到「设置 → 通知」打开';
+      } else {
+        sub.textContent = last + '触发时会尝试发送 Windows 通知';
+      }
+      top.textContent = '盯盘监测：运行中 · ' + notifyTxt;
+    } else {
+      bar.classList.add('stop'); dot.classList.add('stop');
+      title.textContent = '盯盘监测：已停止';
+      sub.textContent = st.last_error
+        ? ('启动失败：' + st.last_error)
+        : '监测未运行；请检查程序是否正常启动';
+      top.textContent = '盯盘监测：已停止';
+    }
+  }
+  function loadEngineStatus () {
+    return call('get_engine_status').then(function (st) {
+      engineStatus = st; renderEngine(st); return st;
+    }).catch(function () { engineStatus = null; renderEngine(null); });
+  }
+
+  /* ==========================================================
+     7b. 历史触发记录（get_alert_history；通知结果与已读分开显示）
+     ========================================================== */
+  var NOTIFY_RESULT_LABEL = {
+    submitted: '已提交系统', failed: '提交失败', skipped: '通知跳过', pending: '待提交'
+  };
+  function renderHistory () {
+    return call('get_alert_history', 100).then(function (r) {
+      var rows = document.getElementById('histRows');
+      var empty = document.getElementById('histEmpty');
+      var cnt = document.getElementById('histCnt');
+      var items = (r && r.items) || [];
+      cnt.textContent = items.length + ' 条';
+      if (!items.length) {
+        rows.innerHTML = ''; empty.style.display = ''; return;
+      }
+      empty.style.display = 'none';
+      rows.innerHTML = items.map(function (it) {
+        var label = NOTIFY_RESULT_LABEL[it.notify_result] || it.notify_result || '未知';
+        var color = it.notify_result === 'failed' ? 'var(--tag-red-ink)'
+          : it.notify_result === 'submitted' ? 'var(--up)' : 'var(--ink-3)';
+        var ackTxt = it.acked ? '已读' : '未读';
+        var valTxt = it.actual_value ? ('实际 ' + escHtml(it.actual_value)) : '';
+        return '<div class="hist-item">' +
+          '<div class="t">' + escHtml(it.trigger_date) + '</div>' +
+          '<div class="d"><b>' + escHtml(it.obj_name) + '</b>' +
+            '<div class="s">' + escHtml(it.cond_snapshot || '') + ' · ' + escHtml(it.triggered_at) + '</div></div>' +
+          '<div class="val">' + valTxt + '</div>' +
+          '<div style="flex-shrink:0;font-size:11.5px;white-space:nowrap;">' +
+            '<span style="color:' + color + '">' + escHtml(label) + '</span> · ' + escHtml(ackTxt) +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }).catch(function () {
+      document.getElementById('histCnt').textContent = '读取失败';
+      document.getElementById('histEmpty').style.display = '';
+      document.getElementById('histRows').innerHTML = '';
+    });
+  }
+
+  /* 开机自启询问：真实写 HKCU Run；失败不假装成功 */
   document.getElementById('autoYesBtn').addEventListener('click', function () {
-    localStorage.setItem('xltc-autostart', '1');
-    localStorage.setItem('xltc-autostart-asked', '1');
-    document.getElementById('autoStartModal').classList.remove('open');
+    var api = window.pywebview && window.pywebview.api;
+    if (!api || !api.set_autostart) {
+      document.getElementById('autoNoNote').textContent = '当前是网页预览，无法写入开机启动项；请在真实 Windows 客户端的「设置」中开启。';
+      document.getElementById('autoNoNote').style.display = '';
+      return;
+    }
+    api.set_autostart(true).then(function (r) {
+      if (r && r.ok) {
+        localStorage.setItem('xltc-autostart', '1');
+        localStorage.setItem('xltc-autostart-asked', '1');
+        document.getElementById('autoStartModal').classList.remove('open');
+      } else {
+        document.getElementById('autoNoNote').textContent = '开启失败：' + ((r && r.error) || '无法写入 HKCU Run');
+        document.getElementById('autoNoNote').style.display = '';
+      }
+    });
   });
   document.getElementById('autoNoBtn').addEventListener('click', function () {
     if (this.textContent === '知道了') {
@@ -850,40 +1012,46 @@
       return;
     }
     localStorage.setItem('xltc-autostart-asked', '1');
+    var api = window.pywebview && window.pywebview.api;
+    if (api && api.set_autostart) api.set_autostart(false);
     document.getElementById('autoNoNote').style.display = '';
     this.textContent = '知道了';
   });
 
   /* ==========================================================
-     8. 后台运行演示（需求见产品规划第 22 节，网页模拟）：
-        关闭主窗口提示（可记住选择）→ 最小化到后台（托盘菜单）/ 退出（二次确认）
+     8. 后台运行（真实桌面窗口）：关闭到托盘 / 真正退出
      ========================================================== */
-  var minOverlay = document.getElementById('minOverlay');
-  var minOverlayText = document.getElementById('minOverlayText');
-  var trayPill = document.getElementById('trayPill');
-
   function activeAlerts () {
     var n = 0;
     ALERTS.forEach(function (r) { if (r.on) n++; });
     return n;
   }
-  function showOverlay (html) {
-    minOverlayText.innerHTML = html;
-    minOverlay.style.display = 'flex';
+  function desktopApi () {
+    return window.pywebview && window.pywebview.api;
   }
-  function goTray () {
-    showOverlay('主窗口已最小化到后台<br><small>点击右下角托盘图标 → 打开主界面（演示）</small>');
-    trayPill.style.display = '';
-    if (!localStorage.getItem('xltc-tray-tip')) {
-      var tip = document.getElementById('trayTip');
-      tip.style.display = '';
-      setTimeout(function () { tip.style.display = 'none'; }, 6000);
-      localStorage.setItem('xltc-tray-tip', '1');
+  function closeToTray () {
+    var api = desktopApi();
+    if (!api || !api.minimize_to_tray) {
+      sysNote('当前是网页预览，无法操作桌面窗口；在真实 Windows 客户端中会最小化到托盘。', true);
+      return;
     }
+    api.minimize_to_tray().then(function (r) {
+      if (!r || !r.ok) sysNote('关闭到托盘失败：' + ((r && r.error) || '未知原因'), true);
+    }).catch(function (err) {
+      sysNote('关闭到托盘失败：' + (err && err.message ? err.message : '本机服务不可用'), true);
+    });
   }
-  function showExited () {
-    showOverlay('小财通已退出（演示）<br><small>启用中的提醒已全部停止 · 刷新页面重新打开</small>');
-    trayPill.style.display = 'none';
+  function realExit () {
+    var api = desktopApi();
+    if (!api || !api.quit_app) {
+      sysNote('当前是网页预览，无法退出桌面程序；真实客户端会结束进程。', true);
+      return;
+    }
+    api.quit_app().then(function (r) {
+      if (!r || !r.ok) sysNote('退出失败：' + ((r && r.error) || '未知原因'), true);
+    }).catch(function (err) {
+      sysNote('退出失败：' + (err && err.message ? err.message : '本机服务不可用'), true);
+    });
   }
   function doExit () {
     var n = activeAlerts();
@@ -891,22 +1059,15 @@
       document.getElementById('exitSub').textContent = '你有 ' + n + ' 条启用中的提醒，退出后这些提醒将停止。';
       document.getElementById('exitModal').classList.add('open');
     } else {
-      showExited();
+      realExit();
     }
   }
-  document.getElementById('closeDemoBtn').addEventListener('click', function () {
-    var beh = localStorage.getItem('xltc-close-behavior');
-    if (beh === 'tray') goTray();
-    else if (beh === 'exit') doExit();
-    else document.getElementById('closeModal').classList.add('open');
-  });
+  document.getElementById('closeDemoBtn').addEventListener('click', closeToTray);
   document.getElementById('closeTrayBtn').addEventListener('click', function () {
-    if (document.getElementById('closeRemember').checked) localStorage.setItem('xltc-close-behavior', 'tray');
     document.getElementById('closeModal').classList.remove('open');
-    goTray();
+    closeToTray();
   });
   document.getElementById('closeExitBtn').addEventListener('click', function () {
-    if (document.getElementById('closeRemember').checked) localStorage.setItem('xltc-close-behavior', 'exit');
     document.getElementById('closeModal').classList.remove('open');
     doExit();
   });
@@ -915,24 +1076,7 @@
   });
   document.getElementById('exitOkBtn').addEventListener('click', function () {
     document.getElementById('exitModal').classList.remove('open');
-    showExited();
-  });
-  document.getElementById('trayBtn').addEventListener('click', function () {
-    var m = document.getElementById('trayMenu');
-    m.style.display = m.style.display === 'none' ? '' : 'none';
-  });
-  document.getElementById('trayOpen').addEventListener('click', function () {
-    document.getElementById('trayMenu').style.display = 'none';
-    minOverlay.style.display = 'none';
-    trayPill.style.display = 'none';
-  });
-  document.getElementById('trayPause').addEventListener('click', function () {
-    document.getElementById('trayMenu').style.display = 'none';
-    sysNote('托盘/后台运行仍是网页演示，本阶段不执行批量暂停；请在上方列表逐条暂停。', true);
-  });
-  document.getElementById('trayQuit').addEventListener('click', function () {
-    document.getElementById('trayMenu').style.display = 'none';
-    doExit();
+    realExit();
   });
 
   /* 各弹层遮罩点击关闭 */
@@ -951,6 +1095,9 @@
     if (window.pywebview && window.pywebview.api) {
       clearInterval(readyTimer);
       loadPage();
+      loadEngineStatus();
+      renderHistory();
+      setInterval(loadEngineStatus, 10000);   /* 每 10 秒刷新真实运行状态 */
     } else if (++readyTries > 100) {
       clearInterval(readyTimer);
       loaded = false;

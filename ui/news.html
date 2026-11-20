@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>小财通 · 市场事件（界面原型）</title>
+<title>小财通 · 市场事件</title>
 <link rel="stylesheet" href="style.css">
 <script>
   // 原型演示：恢复上次选择的外观模式与主题颜色（正式版在「设置 → 外观」中提供）
@@ -49,6 +49,7 @@
     border-radius: 10px; padding: 8px 14px; margin-bottom: 12px; font-size: 12.5px; color: var(--ink-2);
   }
   .notify-bar.on { border-color: var(--brand); }
+  .switch.disabled { opacity: .45; pointer-events: none; cursor: default; }
   .nb-text { flex: 1; min-width: 0; }
   .nb-text b { font-weight: 600; color: var(--ink); font-size: 13px; }
   .nb-text span { display: block; color: var(--ink-3); font-size: 12px; }
@@ -77,13 +78,20 @@
   .daily-title p b { color: var(--brand); font-weight: 700; }
 
   /* 漏斗：展示"筛"的过程（230 → 7 → 3），让用户理解为什么只看到几条 */
-  .funnel { display: grid; grid-template-columns: 1.4fr 1fr .8fr; gap: 6px; width: 100%; margin-top: 10px; }
-  .funnel .fseg { background: var(--bg-soft); border-radius: 9px; padding: 7px 12px; min-width: 0; }
+  .funnel { display: grid; grid-template-columns: 1.25fr 1fr .9fr 1.2fr; gap: 6px; width: 100%; margin-top: 10px; }
+  .funnel .fseg { background: var(--bg-soft); border-radius: 9px; padding: 7px 12px; min-width: 0; cursor: pointer; border: 1px solid transparent; font-family: inherit; text-align: left; }
   .funnel .fseg b { font-size: 14.5px; font-weight: 700; display: block; line-height: 1.25; }
   .funnel .fseg span { font-size: 11.5px; color: var(--ink-3); display: block; margin-top: 1px; }
   .funnel .fseg.keep { background: var(--brand-soft); }
   .funnel .fseg.keep b { color: var(--brand); }
-  @media (max-width: 700px) { .funnel { grid-template-columns: 1fr; } }
+  .funnel .fseg:hover { border-color: var(--brand); }
+  .funnel .fseg.active { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .funnel-result { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 12px; }
+  .funnel-result-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .funnel-result-head b { font-size: 13.5px; }
+  .funnel-result-head span { font-size: 11.5px; color: var(--ink-3); margin-left: 8px; }
+  .msg-why.muted { background: transparent; border: 1px dashed var(--line); color: var(--ink-3); }
+  @media (max-width: 700px) { .funnel { grid-template-columns: 1fr 1fr; } .funnel-result-head { align-items: flex-start; } }
 
   .daily-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
   .daily-list .msg-card { margin-bottom: 0; }
@@ -106,6 +114,7 @@
   .msg-title { font-size: 14.5px; font-weight: 600; }
   .tag-event { background: var(--tag-orange-bg); color: var(--tag-orange-ink); font-weight: 600; } /* 重大市场事件：橙黄 */
   .msg-sum { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
+  .msg-orig { font-size: 11.5px; color: var(--ink-3); margin-top: 5px; line-height: 1.5; }
   .msg-why { font-size: 12.5px; color: var(--ink-2); background: var(--bg-soft); border-radius: 8px; padding: 6px 10px; margin-top: 6px; }
   .msg-why b { color: var(--brand); font-weight: 600; }
   .msg-impact { margin-top: 8px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
@@ -180,7 +189,7 @@
 <!-- 顶部导航（nav.js 统一生成） -->
 <header class="topbar">
   <div class="topbar-inner">
-    <div class="logo"><span class="logo-dot"></span><span class="logo-text">小财通</span></div>
+    <div class="logo"><img class="logo-img" src="assets/brand/xltc-logo.png?v=r4.3" alt="小财通"><span class="logo-text">小财通</span></div>
     <nav class="nav" id="mainNav"></nav>
     <div class="topbar-right">
       <button id="appearanceBtn" class="btn btn-ghost btn-sm">☀️ 浅色 · 🎨 蓝色</button>
@@ -192,6 +201,13 @@
 <main class="page">
   <div class="page-title">市场事件</div>
   <div class="page-sub">先过滤，只留与你有关的事 · 每条讲清：发生了什么、为什么与你有关、影响方向、接下来观察什么、要不要操作</div>
+
+  <!-- 市场机遇独立入口（对应手机端筛选排最右的描边按钮）：不是筛选，是独立的细分赛道观察页 -->
+  <a class="op-entry" href="opportunity.html"
+     style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--brand-soft);border:1px solid var(--ghost-border);border-radius:10px;padding:11px 16px;margin-bottom:14px;text-decoration:none;">
+    <span style="font-size:13.5px;color:var(--ink-2);"><b style="color:var(--brand);">市场机遇 ›</b>　细分赛道观察清单（不读持仓、非推荐），看逻辑、信号与风险</span>
+    <span style="font-size:13px;color:var(--brand);white-space:nowrap;">进入 ›</span>
+  </a>
 
   <div class="news-grid">
     <!-- ==================== 左：事件列表 ==================== -->
@@ -210,8 +226,8 @@
 
         <div class="notify-bar" data-zone="follow">
           <span class="nb-ico">🔔</span>
-          <span class="nb-text"><b>我的关注通知</b><span>正在读取通知设置…</span></span>
-          <span class="switch"></span>
+          <span class="nb-text"><b>我的关注通知</b><span>开启后，新匹配到你持仓的官方事件会弹桌面通知</span></span>
+          <span class="switch" title="点击开关启用/关闭"></span>
         </div>
 
         <!-- 近期小结（真实数据；没有相关事件就空态） -->
@@ -219,14 +235,22 @@
           <div class="daily-head">
             <div class="daily-title">
               <h2><span class="d-lbl">近期小结</span><span id="dailyHeadline">正在检查真实市场事件…</span></h2>
-              <p id="dailySub">数据来自 SEC EDGAR 与美国美联储官方源；只显示与你真实持仓有关的事件。</p>
+              <p id="dailySub">数据来自 SEC EDGAR、美联储与美国劳工统计局（BLS）官方源；只显示与你真实持仓有关的事件。</p>
             </div>
           </div>
           <div class="funnel">
-            <div class="fseg"><b id="funnelTotal">—</b><span>近 7 天实时</span></div>
-            <div class="fseg keep"><b id="funnelRelated">—</b><span>实时与你有关</span></div>
-            <div class="fseg keep"><b id="funnelReport">—</b><span>近 14 天财报</span></div>
-            <div class="fseg keep"><b id="funnelTop">—</b><span>最重要（已进小结）</span></div>
+            <div class="fseg" data-filter="realtime-all" role="button" tabindex="0" title="点击查看近 7 天全部实时事件"><b id="funnelTotal">—</b><span>近 7 天实时</span></div>
+            <div class="fseg keep" data-filter="realtime-related" role="button" tabindex="0" title="点击查看实时且与你有关的事件"><b id="funnelRelated">—</b><span>实时与你有关</span></div>
+            <div class="fseg keep" data-filter="report-all" role="button" tabindex="0" title="点击查看近 14 天全部财报"><b id="funnelReport">—</b><span>近 14 天财报</span></div>
+            <div class="fseg keep" data-filter="top" role="button" tabindex="0" title="点击查看已进近期小结的最重要事件"><b id="funnelTop">—</b><span>最重要（已进小结）</span></div>
+          </div>
+          <div class="funnel-result" id="funnelResult" style="display:none;">
+            <div class="funnel-result-head">
+              <div><b id="funnelResultTitle">筛选结果</b><span id="funnelResultHint"></span></div>
+              <button class="btn btn-ghost btn-sm" id="funnelClear">清除筛选</button>
+            </div>
+            <div class="sub-list" id="funnelList"></div>
+            <div class="empty-hint" id="funnelEmpty">当前筛选下没有事件。</div>
           </div>
           <div class="daily-list" id="dailyList"></div>
         </div>
@@ -253,24 +277,41 @@
       <div class="msg-list" id="discoverZone" style="display:none;">
         <div class="notify-bar" data-zone="discover">
           <span class="nb-ico">🔔</span>
-          <span class="nb-text"><b>市场发现通知</b><span>正在读取通知设置…</span></span>
-          <span class="switch"></span>
+          <span class="nb-text"><b>市场发现通知</b><span>开启后，新出现的重大未匹配事件会弹桌面通知</span></span>
+          <span class="switch" title="点击开关启用/关闭"></span>
         </div>
-        <div class="zone-banner">🌱 <b>市场发现</b>：这里将展示你尚未关注、但有研究价值的市场事件。第一阶段暂未接入真实数据源，先显示空态。</div>
-        <div class="empty-hint show" id="discoverEmpty">市场发现将在第二阶段接入真实数据源。</div>
+        <div class="zone-banner">🌱 <b>市场发现 · 真实官方源</b>：这里展示已抓取、但<b>没有匹配到你当前持仓</b>的公开事件，只作为研究线索，不等于推荐，也不保证每条都有投资价值。收藏和忽略会保存到本机 SQLite。</div>
+        <div class="filters" id="discoverFilters">
+          <button class="f-chip active" data-cat="all">全部</button>
+          <button class="f-chip" data-cat="report">📊 财报</button>
+          <button class="f-chip" data-cat="announce">📄 公告</button>
+          <button class="f-chip" data-cat="policy">🏛 政策</button>
+          <button class="f-chip" data-cat="event">⚠️ 重大事件</button>
+        </div>
+        <div class="sub-list" id="discoverList"></div>
+        <div class="empty-hint" id="discoverEmpty">暂无未匹配当前持仓的官方事件；不会显示示例新闻。</div>
+        <div class="card-hint" id="discoverStatus" style="margin-top:10px; line-height:1.8;">正在读取真实市场事件…</div>
       </div><!-- /discoverZone -->
     </div>
 
     <!-- ==================== 右：侧栏 ==================== -->
     <aside class="sidebar">
       <!-- 通知设置（重大市场事件：全局独立开关；两个区域的开关在各自区域顶部） -->
-      <div class="card">
-        <div class="card-title">通知设置 <span class="hint">目前只保存偏好</span></div>
+      <div class="card" id="notifySettingsCard">
+        <div class="card-title">通知设置 <span class="hint">已接通自动推送</span></div>
         <div class="notif-row">
-          <div class="t"><b>重大市场事件</b><span>本页内显示 · 系统通知尚未实现</span></div>
-          <span class="switch" id="eventSwitch"></span>
+          <div class="t"><b>市场事件通知（总开关）</b><span>关闭后三个分区都不发送；分区仍可单独设置</span></div>
+          <span class="switch" id="newsMasterSwitch" title="点击开关启用/关闭"></span>
         </div>
-        <div class="card-hint">当前只保存你的通知偏好；真正的 Windows/macOS 系统通知还在开发中。市场事件与盯盘提醒的通知开关相互独立。</div>
+        <div class="notif-row">
+          <div class="t"><b>重大市场事件</b><span>重大事件通知分区；新事件会自动推送</span></div>
+          <span class="switch" id="eventSwitch" title="点击开关启用/关闭"></span>
+        </div>
+        <div class="notif-row">
+          <div class="t"><b>真实系统通知</b><span id="notifyStatus">桌面通知通道可测试；新关联事件会自动推送</span></div>
+          <button class="btn btn-ghost btn-sm" id="notifyTestBtn">发送测试通知</button>
+        </div>
+        <div class="card-hint">通知通道已接通；新匹配到你持仓的事件会由后台刷新器自动发送。Windows 免打扰开启时，应用会自绘桌面横幅（与微信/QQ 同类做法）。</div>
       </div>
 
       <!-- 实时 7 天 / 财报 14 天 -->
@@ -290,7 +331,7 @@
       <div class="card">
         <div class="card-title">这些事件怎么来的</div>
         <ul class="rule-list">
-          <li><b>数据源（第一阶段）</b>：SEC EDGAR（美国证监会公告/财报）+ 美联储官方新闻稿；都是官方免费来源。</li>
+          <li><b>数据源（第一阶段）</b>：SEC EDGAR（美国证监会公告/财报）+ 美联储官方新闻稿 + 美国劳工统计局（BLS）官方 RSS；都是官方免费来源。</li>
           <li><b>持仓来源</b>：直接读取本机 SQLite 里的当前持仓，不使用示例名单。</li>
           <li><b>直接关联</b>：事件公司是你持仓基金跟踪指数的成分股（阶段一为前 10 大成分股人工清单）。</li>
           <li><b>间接关联</b>：美联储利率/监管等宏观政策，可能影响该类资产。</li>
@@ -302,7 +343,7 @@
     </aside>
   </div>
 
-  <div class="demo-note">✓ 真实数据（第一阶段）：新闻来自 SEC EDGAR 与美联储官方源；只显示与本机真实持仓有关的事件。没有相关事件时显示空态，不编造、不凑数。数据仅供研究参考，不构成投资建议。</div>
+  <div class="demo-note">✓ 真实数据（第一阶段）：新闻来自 SEC EDGAR、美联储与 BLS 官方源；我的关注只显示与本机真实持仓有关的事件，市场发现展示未匹配的真实官方事件。没有数据时显示空态，不编造、不凑数。数据仅供研究参考，不构成投资建议。</div>
 </main>
 
 <!-- 桌面通知首次询问（首次使用需要桌面通知的功能时主动弹出） -->
@@ -384,21 +425,51 @@
   });
 
   /* ---------- 卡片交互：展开详情 = 标为已读；收藏 / 忽略 ---------- */
+  function itemOf (card) {
+    if (!card || !newsData || !newsData.items) return null;
+    var id = Number(card.dataset.id);
+    return newsData.items.filter(function (x) { return x.id === id; })[0] || null;
+  }
+
+  function saveState (card, patch) {
+    var item = itemOf(card);
+    if (!item) return Promise.resolve(null);
+    var api = window.pywebview && window.pywebview.api;
+    if (!api) return Promise.resolve(null);
+    return api.set_news_state(item.id, patch).then(function (r) {
+      if (r && r.ok) {
+        if (patch.is_read !== undefined) item.is_read = patch.is_read ? 1 : 0;
+        if (patch.is_favorite !== undefined) item.is_favorite = patch.is_favorite ? 1 : 0;
+        if (patch.is_ignored !== undefined) item.is_ignored = patch.is_ignored ? 1 : 0;
+      }
+      return r;
+    }).catch(function () { return null; });
+  }
+
   function markRead (card) {
     if (!card.classList.contains('unread')) return;
     card.classList.remove('unread');
     var dot = card.querySelector('.msg-dot');
     if (dot) dot.remove();
+    saveState(card, { is_read: true });
     updateStats();
   }
 
   function fav (btn) {
-    btn.classList.toggle('on');
-    btn.textContent = btn.classList.contains('on') ? '★' : '☆';
+    var card = btn.closest('.msg-card');
+    var item = itemOf(card);
+    if (!item) return;
+    var now = !item.is_favorite;
+    btn.classList.toggle('on', now);
+    btn.textContent = now ? '★' : '☆';
+    saveState(card, { is_favorite: now });
     updateStats();
   }
 
   function ignore (card) {
+    saveState(card, { is_ignored: true });
+    var item = itemOf(card);
+    if (item) item.is_ignored = 1;
     card.remove();
     var n = document.getElementById('ignoreNotice');
     if (n) n.classList.add('show');
@@ -411,6 +482,7 @@
     zones[z].addEventListener('click', function (e) {
       var btn = e.target.closest('button, a');
       if (btn) {
+        if (btn.disabled) return;
         if (btn.classList.contains('del')) ignore(btn.closest('.msg-card'));
         else if (btn.classList.contains('fav')) fav(btn);
         return;
@@ -434,18 +506,18 @@
       '#dailyList .msg-card, #followList .msg-card').length;
     var rep = zones.follow.querySelectorAll('#reportList .msg-card').length;
     var top = zones.follow.querySelectorAll('#dailyList .msg-card').length;
-    var unread = 0, favs = 0;
-    ['follow', 'discover'].forEach(function (z) {
-      zones[z].querySelectorAll('.msg-card').forEach(function (c) {
-        if (c.classList.contains('unread')) unread++;
-        if (c.querySelector('.fav.on')) favs++;
-      });
-    });
+    var all = (newsData && newsData.items || []).filter(function (i) { return !i.is_ignored; });
+    var unread = all.filter(function (i) { return !i.is_read; }).length;
+    var favs = all.filter(function (i) { return i.is_favorite; }).length;
     document.getElementById('stRel').textContent = rel + ' 条';
     document.getElementById('stReport').textContent = rep + ' 条';
     document.getElementById('stTop').textContent = top + ' 件';
-    document.getElementById('stUnread').textContent = unread;
-    document.getElementById('stFav').textContent = favs;
+    var unreadEl = document.getElementById('stUnread');
+    var favEl = document.getElementById('stFav');
+    unreadEl.textContent = unread + ' 条';
+    favEl.textContent = favs + ' 条';
+    unreadEl.title = '未读状态已保存到本机 SQLite';
+    favEl.title = '收藏状态已保存到本机 SQLite';
   }
 
   /* ==========================================================
@@ -456,8 +528,8 @@
      - 本页与盯盘提醒页的通知开关**相互独立**，互不连带修改。
      ========================================================== */
   var NOTIFY_DESC = {
-    follow:   { name: '我的关注通知', offDesc: '开启后重要事件会弹窗提醒', onDesc: '重要事件会弹窗提醒 · 可在「设置」中修改' },
-    discover: { name: '市场发现通知', offDesc: '开启后只推送「重大」级别的事件', onDesc: '只推送「重大」级别的事件 · 可在「设置」中修改' },
+    follow:   { name: '我的关注通知', offDesc: '开启后重要事件会弹窗提醒', onDesc: '新匹配到你持仓的事件会弹窗提醒 · 可在「设置」中修改' },
+    discover: { name: '市场发现通知', offDesc: '开启后只推送「重大」级别的事件', onDesc: '新出现的重大未匹配事件会弹窗提醒 · 可在「设置」中修改' },
     event:    { name: '重大市场事件通知', offDesc: '开启后重大事件会弹窗提醒', onDesc: '重大事件会弹窗提醒 · 可在「设置」中修改' }
   };
 
@@ -478,10 +550,12 @@
     bar.querySelector('.nb-ico').textContent = on ? '🔔' : '🔕';
     if (!m) {
       bar.querySelector('.nb-text b').textContent = d.name + '：已关闭';
-      bar.querySelector('.nb-text span').textContent = '你选择了关闭桌面通知 · 事件仍会正常显示在本页 · 点击开关可重新开启';
+      bar.querySelector('.nb-text span').textContent = '点击开关可开启；事件仍会正常显示在本页';
     } else {
       bar.querySelector('.nb-text b').textContent = d.name + (on ? '：已开启' : '：未开启');
-      bar.querySelector('.nb-text span').textContent = on ? d.onDesc : d.offDesc;
+      bar.querySelector('.nb-text span').textContent = on
+        ? '新事件会自动推送（免打扰下用桌面横幅） · 可在「设置」中修改'
+        : d.offDesc;
     }
     bar.querySelector('.switch').classList.toggle('on', on);
   }
@@ -513,11 +587,45 @@
   var evSw = document.getElementById('eventSwitch');
   evSw.addEventListener('click', function () { switchClick('event'); });
 
-  /* 渲染：设置从 SQLite 读到、或发生变化时刷新一次（含首次读取）。
-     首次询问答完之后，本页的开关显示会跟着自动更新。 */
+  /* 总开关：只改 news_enabled，不碰三个分区已保存的值 */
+  var masterSw = document.getElementById('newsMasterSwitch');
+  masterSw.addEventListener('click', function () {
+    xltcNotify.set({ news_enabled: !masterOn() });
+  });
+
+  /* 真实系统通知测试：调用 Python 发 Windows Toast，不是页面内模拟提示 */
+  var testBtn = document.getElementById('notifyTestBtn');
+  var notifyStatus = document.getElementById('notifyStatus');
+  xltcNotify.capabilities().then(function (cap) {
+    if (cap && cap.toast_enabled === false) {
+      notifyStatus.textContent = 'Windows 系统通知当前是关闭的；请到「设置 → 通知」打开后再测试。';
+    }
+  }).catch(function () { /* 能力读取失败不阻断页面 */ });
+  testBtn.addEventListener('click', function () {
+    testBtn.disabled = true;
+    notifyStatus.textContent = '正在发送测试通知…';
+    xltcNotify.sendTest('news').then(function (r) {
+      testBtn.disabled = false;
+      if (r && r.ok && r.toast_enabled === false) {
+        notifyStatus.textContent = '已提交，但 Windows 系统通知总开关当前是关闭的，可能收不到；请到「设置 → 通知」打开系统通知设置后再试。';
+      } else if (r && r.ok) {
+        notifyStatus.textContent = (r.banner
+          ? '已发送 Windows 通知；桌面横幅已弹出（免打扰下也可见）'
+          : '已提交到 Windows 通知中心；桌面横幅未能拉起') + '；新关联事件会自动推送';
+      } else {
+        notifyStatus.textContent = '发送失败：' + ((r && r.error) || '未知原因');
+      }
+    }).catch(function (err) {
+      testBtn.disabled = false;
+      notifyStatus.textContent = '发送失败：' + (err && err.message ? err.message : '本机通知服务不可用');
+    });
+  });
+
+  /* 渲染：设置从 SQLite 读到、或发生变化时刷新一次（含首次读取）。 */
   function renderAll () {
     ['follow', 'discover'].forEach(renderNotify);
     evSw.classList.toggle('on', zoneOn('event'));
+    masterSw.classList.toggle('on', masterOn());
   }
   xltcNotify.onChange(renderAll);
 
@@ -546,13 +654,15 @@
 
 
   /* ==========================================================
-     真实市场事件（第一阶段：SEC EDGAR + 美联储）
+     真实市场事件（第一阶段：SEC EDGAR + 美联储 + BLS）
      - 数据来自 Python get_news_feed()
      - 只渲染与真实持仓有关的事件；没有就空态
      - 保留原有卡片样式与交互
      ========================================================== */
   var newsData = null;
-  var CAT_CN = { monetary_policy: '货币政策', regulation: '监管政策', speech: '官员讲话', other: '其他' };
+  var funnelSets = null;
+  var funnelActive = null;
+  var CAT_CN = { monetary_policy: '货币政策', regulation: '监管政策', speech: '官员讲话', economic_data: '经济数据', other: '其他' };
 
   function escHtml (s) {
     return String(s === null || s === undefined ? '' : s)
@@ -568,6 +678,7 @@
   function sourceLabel (s) {
     if (s.key === 'sec_edgar') return 'SEC EDGAR';
     if (s.key === 'fed_rss') return '美联储 RSS';
+    if (s.key === 'bls_rss') return '美国劳工统计局 RSS';
     return s.name || s.key || '数据源';
   }
 
@@ -684,23 +795,36 @@
       ? ('<span>·</span><span>另有 ' + item.duplicate_count + ' 家报道</span>') : '';
     var when = fmtWhen(item.published_at);
     var url = item.url ? escHtml(item.url) : '#';
+    var why = whyText(item);
+    var whyHtml = why
+      ? ('<p class="msg-why"><b>🎯 为什么与你有关</b>：' + escHtml(why) + '</p>')
+      : '<p class="msg-why muted">这条官方事件暂未匹配到你的持仓，只作为市场背景展示。</p>';
+    var impactHtml = funds.length
+      ? ('<div class="msg-impact"><span class="i-label">可能影响的持仓</span>' + fundTags +
+          (evidence ? '<span class="tag tag-green">' + evidence + '</span>' : '') + '</div>')
+      : '';
+    var title = item.title_zh || item.title;
+    var summary = item.summary_zh || item.summary || '';
+    var original = (item.title_zh && item.title && item.title !== title)
+      ? '<p class="msg-orig">原文：' + escHtml(item.title) + '</p>' : '';
     return '' +
-      '<article class="msg-card unread ' + (item.category === 'event' ? 'event' : '') + '" data-cat="' + item.category + '">' +
+      '<article class="msg-card ' + (item.is_read ? '' : 'unread ') + (item.category === 'event' ? 'event' : '') + '" data-id="' + item.id + '" data-cat="' + item.category + '">' +
         '<div class="msg-head">' +
-          '<span class="msg-dot"></span>' +
+          (item.is_read ? '' : '<span class="msg-dot"></span>') +
           '<span class="tag ' + cat.cls + '">' + cat.text + '</span>' +
           '<span class="lv ' + lv.cls + '">' + lv.text + '</span>' +
-          '<h3 class="msg-title">' + escHtml(item.title) + '</h3>' +
+          (item.title_zh ? '<span class="tag">自动翻译</span>' : '') +
+          '<h3 class="msg-title">' + escHtml(title) + '</h3>' +
         '</div>' +
-        '<p class="msg-sum">' + escHtml(item.summary || '（官方原文没有提供摘要，点击查看原文）') + '</p>' +
-        '<p class="msg-why"><b>🎯 为什么与你有关</b>：' + escHtml(whyText(item)) + '</p>' +
-        '<div class="msg-impact"><span class="i-label">可能影响的持仓</span>' + fundTags +
-          (evidence ? '<span class="tag tag-green">' + evidence + '</span>' : '') + '</div>' +
+        original +
+        '<p class="msg-sum">' + escHtml(summary || '（官方原文没有提供摘要，点击查看原文）') + '</p>' +
+        whyHtml +
+        impactHtml +
         '<div class="msg-foot">' +
           '<span>' + escHtml(item.source_name) + '</span><span>·</span><span>' + escHtml(when) + '</span>' + dup +
           '<span class="foot-right">' +
-            '<button class="icon-btn fav" title="收藏">☆</button>' +
-            '<button class="icon-btn del" title="忽略">✕</button>' +
+            '<button class="icon-btn fav ' + (item.is_favorite ? 'on' : '') + '" title="收藏（保存到本机）">' + (item.is_favorite ? '★' : '☆') + '</button>' +
+            '<button class="icon-btn del" title="忽略（保存到本机，不再显示）">✕</button>' +
           '</span>' +
         '</div>' +
         '<div class="msg-detail">' +
@@ -713,21 +837,45 @@
       '</article>';
   }
 
+  function renderDiscover (items) {
+    var list = document.getElementById('discoverList');
+    list.innerHTML = items.map(cardHtml).join('');
+    var empty = document.getElementById('discoverEmpty');
+    empty.textContent = '暂无未匹配当前持仓的官方事件；不会显示示例新闻。';
+    empty.classList.toggle('show', items.length === 0);
+    var st = document.getElementById('discoverStatus');
+    st.textContent = '市场发现：官方源中未匹配当前持仓 ' + items.length + ' 条（已忽略的不再显示）。' +
+      '这些事件只作为研究线索，不等于推荐；收藏/忽略已保存到本机 SQLite。';
+    updateCounts();
+    applyFilter('discover');
+  }
+
   function renderNews (data) {
     newsData = data || {};
-    var items = (newsData.items || []).filter(function (i) { return i.funds && i.funds.length; });
-    var realtime = items.filter(function (i) { return i.news_kind !== 'report'; });
-    var reports = items.filter(function (i) { return i.news_kind === 'report'; });
+    var all = (newsData.items || []).filter(function (i) { return !i.is_ignored; });
+    var items = all.filter(function (i) { return i.funds && i.funds.length; });
+    var realtimeAll = all.filter(function (i) { return i.news_kind !== 'report'; });
+    var reportAll = all.filter(function (i) { return i.news_kind === 'report'; });
+    var discoverItems = all.filter(function (i) { return !i.funds || i.funds.length === 0; });
+    var realtime = realtimeAll.filter(function (i) { return i.funds && i.funds.length; });
+    var reports = reportAll.filter(function (i) { return i.funds && i.funds.length; });
     var top = realtime.filter(function (i) { return (i.score || 0) >= 0.7; });
     var daily = top.slice(0, 3);
     var dailyIds = {};
     daily.forEach(function (i) { dailyIds[i.id] = true; });
     var rest = realtime.filter(function (i) { return !dailyIds[i.id]; });
     var s = newsData.summary || {};
+    funnelSets = {
+      'realtime-all': realtimeAll,
+      'realtime-related': realtime,
+      'report-all': reportAll,
+      'top': daily
+    };
 
     document.getElementById('dailyList').innerHTML = daily.map(cardHtml).join('');
     document.getElementById('followList').innerHTML = rest.map(cardHtml).join('');
     document.getElementById('reportList').innerHTML = reports.map(cardHtml).join('');
+    renderDiscover(discoverItems);
 
     var realtimeTotal = s.realtime_total_7d != null ? s.realtime_total_7d : (s.total_7d || 0);
     var realtimeRelated = s.realtime_related_7d != null ? s.realtime_related_7d : (s.related_7d || 0);
@@ -775,13 +923,16 @@
       (overall === 'failed' ? 'var(--tag-red-ink)' : '');
 
     // 三类时间严格分开：检查时间 ≠ 成功检查时间 ≠ 最新文章时间。
+    // 顶部“最近刷新”优先使用与净值刷新共用的 refresh_cycle_at。
     var lastAttempt = newsData.last_attempt_at ||
       maxStamp(sources.map(function (s) { return s.last_attempt_at; }));
     var lastSuccess = newsData.last_success_at ||
       maxStamp(sources.map(function (s) { return s.last_success_at; }));
+    var refreshCycle = newsData.refresh_cycle_at || lastSuccess;
     var latestItem = newsData.latest_item_at ||
       maxStamp((newsData.items || []).map(function (x) { return x.published_at; }));
     var lines = [
+      '最近刷新（与净值刷新同周期）：' + (refreshCycle || '尚未刷新'),
       '最近检查：' + (lastAttempt || '尚未检查'),
       '最近成功：' + (lastSuccess || '尚未成功'),
       '最新文章：' + (latestItem || '暂无文章')
@@ -801,6 +952,57 @@
     updateCounts();
     updateStats();
   }
+
+  /* ---------- 统计卡点击筛选（2026-11-17 人工验收新增） ---------- */
+  function clearFunnel () {
+    funnelActive = null;
+    document.querySelectorAll('.fseg').forEach(function (el) {
+      el.classList.remove('active');
+      el.setAttribute('aria-pressed', 'false');
+    });
+    document.getElementById('funnelResult').style.display = 'none';
+    document.getElementById('funnelList').innerHTML = '';
+  }
+
+  function renderFunnel (key) {
+    if (!funnelSets || !funnelSets[key]) return;
+    var cfg = {
+      'realtime-all': { title: '近 7 天实时 · 全部', hint: '包含与你无关的官方事件' },
+      'realtime-related': { title: '近 7 天实时 · 与你有关', hint: '只列匹配到当前持仓的事件' },
+      'report-all': { title: '近 14 天财报 · 全部', hint: '近 14 天窗口内的官方财报' },
+      'top': { title: '最重要 · 已进近期小结', hint: '重要度达标的前 3 条' }
+    }[key];
+    var items = funnelSets[key] || [];
+    funnelActive = key;
+    document.querySelectorAll('.fseg').forEach(function (el) {
+      var on = el.getAttribute('data-filter') === key;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    document.getElementById('funnelResultTitle').textContent = cfg.title + '（' + items.length + ' 条）';
+    document.getElementById('funnelResultHint').textContent = cfg.hint;
+    var list = document.getElementById('funnelList');
+    list.innerHTML = items.map(cardHtml).join('');
+    var empty = document.getElementById('funnelEmpty');
+    empty.textContent = '当前筛选下没有事件。';
+    empty.classList.toggle('show', items.length === 0);
+    var box = document.getElementById('funnelResult');
+    box.style.display = '';
+    if (items.length) {
+      try { box.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) { /* 老 WebView 忽略 */ }
+    }
+  }
+
+  document.querySelectorAll('.fseg').forEach(function (el) {
+    el.addEventListener('click', function () { renderFunnel(el.getAttribute('data-filter')); });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        renderFunnel(el.getAttribute('data-filter'));
+      }
+    });
+  });
+  document.getElementById('funnelClear').addEventListener('click', clearFunnel);
 
   function loadNews () {
     var api = window.pywebview && window.pywebview.api;
